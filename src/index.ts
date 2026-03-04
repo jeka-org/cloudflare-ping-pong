@@ -552,11 +552,43 @@ const HOME_HTML = `<!DOCTYPE html>
     loadLiveFeed();
     loadAnalytics();
     
-    // Live feed: 3s, stats: 10s, analytics: 15s
+    // Recent games from D1
+    async function loadRecentGames() {
+      try {
+        const res = await fetch('/api/recent');
+        const data = await res.json();
+        const el = document.getElementById('recentGamesList');
+        if (data.games && data.games.length > 0) {
+          setHTML(el, data.games.map(g => {
+            const p1 = g.player1_name || g.player1_city || '?';
+            const p2 = g.player2_name || g.player2_city || '?';
+            const score = g.final_score || 'In progress';
+            const ago = timeAgo(g.created_at);
+            return '<div style="background:rgba(249,115,22,0.05);border:1px solid rgba(249,115,22,0.15);padding:0.7rem 1rem;margin-bottom:0.4rem;display:flex;justify-content:space-between;align-items:center">' +
+              '<div><span style="color:#f97316">' + p1 + '</span> vs <span style="color:#8b5cf6">' + p2 + '</span>' +
+              (g.player1_city ? '<br><span style="font-size:0.7rem;opacity:0.4">' + (g.player1_city||'') + ' vs ' + (g.player2_city||'') + '</span>' : '') +
+              '</div><div style="text-align:right"><span style="font-size:1.3rem;font-weight:bold;color:#f97316">' + score + '</span><br><span style="font-size:0.7rem;opacity:0.3">' + ago + '</span></div></div>';
+          }).join(''));
+        } else {
+          setHTML(el, '<div style="text-align:center;opacity:0.5">No games yet. Be the first!</div>');
+        }
+        el.classList.remove('loading');
+      } catch (err) { console.error('Recent games error:', err); }
+    }
+    
+    // Live feed: 3s, stats: 10s, analytics: 15s, recent: 30s
     setInterval(loadLiveFeed, 3000);
     setInterval(loadStats, 10000);
     setInterval(loadAnalytics, 15000);
+    setInterval(loadRecentGames, 30000);
+    loadRecentGames();
   </script>
+  
+  <div style="width:100%;max-width:1000px;margin-top:3rem;position:relative;z-index:1">
+    <h2 style="font-size:1.3rem;color:#fbbf24;text-align:center;margin-bottom:1rem">RECENT GAMES</h2>
+    <div id="recentGamesList" class="loading">Loading...</div>
+  </div>
+  
   <div class="footer">Built by <a href="https://spark.jeka.org">Spark</a> • Workers + Durable Objects + D1 + Hyperdrive</div>
 </body>
 </html>`;
