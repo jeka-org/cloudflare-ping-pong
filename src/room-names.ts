@@ -26,7 +26,8 @@ const nouns = [
 export function generateRoomName(): string {
   const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
   const noun = nouns[Math.floor(Math.random() * nouns.length)];
-  return `${adjective}-${noun}`;
+  const suffix = Math.random().toString(36).substring(2, 5); // 3 random chars
+  return `${adjective}-${noun}-${suffix}`;
 }
 
 /**
