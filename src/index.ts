@@ -217,11 +217,9 @@ const HOME_HTML = `<!DOCTYPE html>
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
       min-height: 100vh;
-      padding: 20px;
+      padding: 40px 20px 20px;
       position: relative;
-      overflow: hidden;
     }
     body::before {
       content: '';
@@ -415,6 +413,9 @@ const HOME_HTML = `<!DOCTYPE html>
   </div>
 
   <script>
+    // Only update DOM if content changed (prevents blink)
+    function setHTML(el, html) { if (el && el.innerHTML !== html) el.innerHTML = html; }
+    
     const eventIcons = { player_joined: '🎮', point_scored: '⚡', game_over: '🏆' };
     const eventLabels = { player_joined: 'Player joined', point_scored: 'Point scored', game_over: 'Game over' };
     
@@ -451,9 +452,9 @@ const HOME_HTML = `<!DOCTYPE html>
         const data = await res.json();
         const el = document.getElementById('liveFeed');
         if (data.events && data.events.length > 0) {
-          el.innerHTML = data.events.slice(0, 10).map(renderEvent).join('');
+          setHTML(el, data.events.slice(0, 10).map(renderEvent).join(''));
         } else {
-          el.innerHTML = '<span style="opacity:0.5">No events yet. Play a game!</span>';
+          setHTML(el, '<span style="opacity:0.5">No events yet. Play a game!</span>');
         }
         el.classList.remove('loading');
       } catch (err) { console.error('Live feed error:', err); }
@@ -477,42 +478,42 @@ const HOME_HTML = `<!DOCTYPE html>
         
         const actEl = document.getElementById('activity');
         if (data.activity.length === 0) {
-          actEl.innerHTML = '<span style="opacity:0.5">No activity in last 24h</span>';
+          setHTML(actEl, '<span style="opacity:0.5">No activity in last 24h</span>');
         } else {
           const maxG = Math.max(...data.activity.map(a => parseInt(a.games)));
-          actEl.innerHTML = data.activity.slice(0,12).map(a => {
+          setHTML(actEl, data.activity.slice(0,12).map(a => {
             const hr = new Date(a.hour).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
             const pct = Math.max(5, (parseInt(a.games)/maxG)*100);
             return '<div class="bar-container"><span style="min-width:50px;font-size:0.7rem">' + hr + '</span><div class="bar" style="width:' + pct + '%"></div><span style="font-size:0.7rem;opacity:0.5">' + a.games + '</span></div>';
-          }).join('');
+          }).join(''));
         }
         actEl.classList.remove('loading');
         
         const citEl = document.getElementById('cities');
         if (data.cities.length === 0) {
-          citEl.innerHTML = '<span style="opacity:0.5">No city data yet</span>';
+          setHTML(citEl, '<span style="opacity:0.5">No city data yet</span>');
         } else {
-          citEl.innerHTML = '<table><tr><th>City</th><th>Country</th><th>Games</th></tr>' +
-            data.cities.slice(0,8).map(c => '<tr><td>' + c.city + '</td><td>' + (c.country||'?') + '</td><td style="color:#f97316">' + c.games + '</td></tr>').join('') + '</table>';
+          setHTML(citEl, '<table><tr><th>City</th><th>Country</th><th>Games</th></tr>' +
+            data.cities.slice(0,8).map(c => '<tr><td>' + c.city + '</td><td>' + (c.country||'?') + '</td><td style="color:#f97316">' + c.games + '</td></tr>').join('') + '</table>');
         }
         citEl.classList.remove('loading');
         
         const topEl = document.getElementById('topGames');
         if (data.topGames && data.topGames.length > 0) {
-          topEl.innerHTML = '<table><tr><th>Room</th><th>Points</th><th>Best Rally</th></tr>' +
-            data.topGames.slice(0,8).map(g => '<tr><td style="font-size:0.75rem">' + g.room_id + '</td><td style="color:#f97316">' + (g.points||0) + '</td><td>' + (g.longest_rally||0) + ' hits</td></tr>').join('') + '</table>';
+          setHTML(topEl, '<table><tr><th>Room</th><th>Points</th><th>Best Rally</th></tr>' +
+            data.topGames.slice(0,8).map(g => '<tr><td style="font-size:0.75rem">' + g.room_id + '</td><td style="color:#f97316">' + (g.points||0) + '</td><td>' + (g.longest_rally||0) + ' hits</td></tr>').join('') + '</table>');
         } else {
-          topEl.innerHTML = '<span style="opacity:0.5">No games yet</span>';
+          setHTML(topEl, '<span style="opacity:0.5">No games yet</span>');
         }
         topEl.classList.remove('loading');
         
         const totEl = document.getElementById('totals');
         if (data.totals) {
-          totEl.innerHTML = '<div style="display:flex;gap:2rem;justify-content:center">' +
+          setHTML(totEl, '<div style="display:flex;gap:2rem;justify-content:center">' +
             '<div style="text-align:center"><div style="font-size:2rem;color:#f97316">' + (data.totals.total||0) + '</div><div style="font-size:0.75rem;opacity:0.5">Events</div></div>' +
-            '<div style="text-align:center"><div style="font-size:2rem;color:#fbbf24">' + (data.totals.rooms||0) + '</div><div style="font-size:0.75rem;opacity:0.5">Rooms</div></div></div>';
+            '<div style="text-align:center"><div style="font-size:2rem;color:#fbbf24">' + (data.totals.rooms||0) + '</div><div style="font-size:0.75rem;opacity:0.5">Rooms</div></div></div>');
         } else {
-          totEl.innerHTML = '<span style="opacity:0.5">No data</span>';
+          setHTML(totEl, '<span style="opacity:0.5">No data</span>');
         }
         totEl.classList.remove('loading');
       } catch (err) { console.error('Analytics error:', err); }
