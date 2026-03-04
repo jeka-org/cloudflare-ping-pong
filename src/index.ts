@@ -145,6 +145,22 @@ export default {
         }
       }
       
+      // API: Recent live events
+      if (url.pathname === '/api/events/live') {
+        try {
+          const client = new pg.Client(env.HYPERDRIVE.connectionString);
+          await client.connect();
+          const result = await client.query(
+            `SELECT room_id, event_type, player_slot, colo, city, country, metadata, timestamp
+             FROM game_events ORDER BY timestamp DESC LIMIT 20`
+          );
+          await client.end();
+          return Response.json({ events: result.rows }, { headers: corsHeaders });
+        } catch (err: any) {
+          return Response.json({ error: err.message }, { status: 500, headers: corsHeaders });
+        }
+      }
+      
       // Analytics dashboard page (both paths)
       if (url.pathname === '/analytics' || url.pathname === '/dashboard') {
         return new Response(ANALYTICS_HTML, {
@@ -863,7 +879,7 @@ const ANALYTICS_HTML = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Global Pong - Analytics</title>
+  <title>Global Pong - Live Dashboard</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -871,7 +887,7 @@ const ANALYTICS_HTML = `<!DOCTYPE html>
       background: #0a0a0a;
       color: #f5f5f5;
       padding: 2rem;
-      max-width: 1200px;
+      max-width: 1400px;
       margin: 0 auto;
     }
     h1 {
@@ -883,31 +899,44 @@ const ANALYTICS_HTML = `<!DOCTYPE html>
     }
     .back { color: #f97316; text-decoration: none; font-size: 0.9rem; }
     .back:hover { opacity: 0.8; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin-top: 2rem; }
+    .live-dot { display: inline-block; width: 8px; height: 8px; background: #22c55e; border-radius: 50%; margin-right: 6px; animation: blink 1.5s infinite; }
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem; }
+    .grid-full { grid-column: 1 / -1; }
     .card {
       background: rgba(249,115,22,0.05);
       border: 1px solid rgba(249,115,22,0.2);
       padding: 1.5rem;
     }
-    .card h2 { color: #fbbf24; font-size: 1.2rem; margin-bottom: 1rem; }
+    .card h2 { color: #fbbf24; font-size: 1.1rem; margin-bottom: 1rem; }
+    .stats-row { display: flex; gap: 2rem; flex-wrap: wrap; }
+    .stat { text-align: center; }
     .stat-big { font-size: 3rem; color: #f97316; }
-    .stat-label { opacity: 0.5; font-size: 0.9rem; }
+    .stat-label { opacity: 0.5; font-size: 0.8rem; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid rgba(249,115,22,0.1); }
-    th { color: #fbbf24; font-size: 0.8rem; text-transform: uppercase; }
-    td { font-size: 0.9rem; }
+    th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid rgba(249,115,22,0.1); }
+    th { color: #fbbf24; font-size: 0.75rem; text-transform: uppercase; }
+    td { font-size: 0.85rem; }
     .bar-container { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem; }
-    .bar { height: 16px; background: linear-gradient(90deg, #f97316, #fbbf24); min-width: 2px; }
+    .bar { height: 14px; background: linear-gradient(90deg, #f97316, #fbbf24); min-width: 2px; transition: width 0.3s; }
+    .event-feed { max-height: 400px; overflow-y: auto; }
+    .event-item { padding: 0.5rem 0; border-bottom: 1px solid rgba(249,115,22,0.08); display: flex; align-items: center; gap: 0.75rem; animation: fadeIn 0.3s; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+    .event-icon { font-size: 1.2rem; min-width: 24px; text-align: center; }
+    .event-text { font-size: 0.85rem; flex: 1; }
+    .event-time { font-size: 0.7rem; opacity: 0.4; min-width: 50px; text-align: right; }
+    .event-room { color: #f97316; font-size: 0.75rem; }
     .loading { opacity: 0.5; animation: pulse 1s infinite; }
     @keyframes pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
     .footer { margin-top: 3rem; font-size: 0.8rem; opacity: 0.3; }
     .footer a { color: #f97316; text-decoration: none; }
+    @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <a href="/" class="back">&larr; Back to Game</a>
-  <h1>&#x1F4CA; Analytics</h1>
-  <p style="opacity:0.5;margin-top:0.5rem">Powered by Hyperdrive + Postgres</p>
+  <h1>Live Dashboard</h1>
+  <p style="opacity:0.5;margin-top:0.5rem"><span class="live-dot"></span>Real-time system view &bull; Hyperdrive + Postgres</p>
   
   <div class="grid">
     <div class="card">
@@ -917,6 +946,10 @@ const ANALYTICS_HTML = `<!DOCTYPE html>
     <div class="card">
       <h2>ACTIVITY (24H)</h2>
       <div id="activity" class="loading">Loading...</div>
+    </div>
+    <div class="card grid-full">
+      <h2><span class="live-dot"></span>LIVE EVENT FEED</h2>
+      <div id="liveFeed" class="event-feed loading">Waiting for events...</div>
     </div>
     <div class="card">
       <h2>TOP CITIES</h2>
@@ -928,9 +961,66 @@ const ANALYTICS_HTML = `<!DOCTYPE html>
     </div>
   </div>
   
-  <div class="footer">Built by <a href="https://spark.jeka.org">Spark</a> | Data via Hyperdrive to Postgres</div>
+  <div class="footer">Built by <a href="https://spark.jeka.org">Spark</a> | Data via Hyperdrive &rarr; Postgres</div>
 
   <script>
+    const eventIcons = {
+      player_joined: '&#x1F3AE;',
+      point_scored: '&#x26BD;',
+      game_over: '&#x1F3C6;',
+    };
+    const eventLabels = {
+      player_joined: 'Player joined',
+      point_scored: 'Point scored',
+      game_over: 'Game over',
+    };
+    
+    function timeAgo(ts) {
+      const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+      if (s < 5) return 'now';
+      if (s < 60) return s + 's ago';
+      if (s < 3600) return Math.floor(s/60) + 'm ago';
+      return Math.floor(s/3600) + 'h ago';
+    }
+    
+    function renderEvent(e) {
+      const icon = eventIcons[e.event_type] || '&#x2022;';
+      const label = eventLabels[e.event_type] || e.event_type;
+      let detail = '';
+      if (e.event_type === 'player_joined') {
+        detail = (e.city || 'Unknown') + (e.country ? ', ' + e.country : '') + (e.colo ? ' (via ' + e.colo + ')' : '');
+      } else if (e.event_type === 'point_scored' && e.metadata) {
+        const m = typeof e.metadata === 'string' ? JSON.parse(e.metadata) : e.metadata;
+        detail = (m.score1 || 0) + '-' + (m.score2 || 0) + (m.rally_hits ? ' (' + m.rally_hits + ' hits)' : '');
+      } else if (e.event_type === 'game_over' && e.metadata) {
+        const m = typeof e.metadata === 'string' ? JSON.parse(e.metadata) : e.metadata;
+        detail = 'Winner: P' + (e.player_slot || '?') + ' | ' + (m.score1||0) + '-' + (m.score2||0) + (m.duration_seconds ? ' | ' + m.duration_seconds + 's' : '');
+      }
+      return '<div class="event-item">' +
+        '<span class="event-icon">' + icon + '</span>' +
+        '<div class="event-text">' + label + '<br><span class="event-room">' + (e.room_id || '') + '</span> <span style="opacity:0.5;font-size:0.8rem">' + detail + '</span></div>' +
+        '<span class="event-time">' + timeAgo(e.timestamp) + '</span>' +
+        '</div>';
+    }
+    
+    let lastEventCount = 0;
+    
+    async function loadLiveFeed() {
+      try {
+        const res = await fetch('/api/events/live');
+        const data = await res.json();
+        const el = document.getElementById('liveFeed');
+        if (data.events && data.events.length > 0) {
+          el.innerHTML = data.events.map(renderEvent).join('');
+        } else {
+          el.innerHTML = '<span style="opacity:0.5">No events yet. Play a game to see data flow!</span>';
+        }
+        el.classList.remove('loading');
+      } catch (err) {
+        console.error('Live feed error:', err);
+      }
+    }
+    
     async function loadAnalytics() {
       try {
         const res = await fetch('/api/analytics');
@@ -946,9 +1036,9 @@ const ANALYTICS_HTML = `<!DOCTYPE html>
         
         const t = data.totals;
         document.getElementById('totals').innerHTML = 
-          '<div style="display:flex;gap:2rem">' +
-          '<div><div class="stat-big">' + (t.total || 0) + '</div><div class="stat-label">Events</div></div>' +
-          '<div><div class="stat-big">' + (t.rooms || 0) + '</div><div class="stat-label">Rooms</div></div>' +
+          '<div class="stats-row">' +
+          '<div class="stat"><div class="stat-big">' + (t.total || 0) + '</div><div class="stat-label">Events</div></div>' +
+          '<div class="stat"><div class="stat-big">' + (t.rooms || 0) + '</div><div class="stat-label">Rooms</div></div>' +
           '</div>';
         document.getElementById('totals').classList.remove('loading');
         
@@ -957,12 +1047,12 @@ const ANALYTICS_HTML = `<!DOCTYPE html>
           actEl.innerHTML = '<span style="opacity:0.5">No activity in last 24h</span>';
         } else {
           const maxGames = Math.max(...data.activity.map(a => parseInt(a.games)));
-          actEl.innerHTML = data.activity.map(a => {
+          actEl.innerHTML = data.activity.slice(0, 12).map(a => {
             const hour = new Date(a.hour).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const pct = Math.max(5, (parseInt(a.games) / maxGames) * 100);
-            return '<div class="bar-container"><span style="min-width:60px;font-size:0.8rem">' + hour + '</span>' +
+            return '<div class="bar-container"><span style="min-width:55px;font-size:0.75rem">' + hour + '</span>' +
                    '<div class="bar" style="width:' + pct + '%"></div>' +
-                   '<span style="font-size:0.8rem;opacity:0.6">' + a.games + ' games</span></div>';
+                   '<span style="font-size:0.75rem;opacity:0.5">' + a.games + '</span></div>';
           }).join('');
         }
         actEl.classList.remove('loading');
@@ -972,7 +1062,7 @@ const ANALYTICS_HTML = `<!DOCTYPE html>
           citEl.innerHTML = '<span style="opacity:0.5">No city data yet</span>';
         } else {
           citEl.innerHTML = '<table><tr><th>City</th><th>Country</th><th>Games</th></tr>' +
-            data.cities.map(c => '<tr><td>' + c.city + '</td><td>' + (c.country || '?') + '</td><td style="color:#f97316">' + c.games + '</td></tr>').join('') +
+            data.cities.slice(0, 10).map(c => '<tr><td>' + c.city + '</td><td>' + (c.country || '?') + '</td><td style="color:#f97316">' + c.games + '</td></tr>').join('') +
             '</table>';
         }
         citEl.classList.remove('loading');
@@ -981,23 +1071,24 @@ const ANALYTICS_HTML = `<!DOCTYPE html>
         if (data.topGames.length === 0) {
           tgEl.innerHTML = '<span style="opacity:0.5">No completed games yet</span>';
         } else {
-          tgEl.innerHTML = '<table><tr><th>Room</th><th>Points</th><th>Longest Rally</th></tr>' +
-            data.topGames.map(g => '<tr><td>' + g.room_id + '</td><td style="color:#f97316">' + (g.points || 0) + '</td><td>' + (g.longest_rally || '-') + '</td></tr>').join('') +
+          tgEl.innerHTML = '<table><tr><th>Room</th><th>Points</th><th>Rally</th></tr>' +
+            data.topGames.slice(0, 8).map(g => '<tr><td>' + g.room_id + '</td><td style="color:#f97316">' + (g.points || 0) + '</td><td>' + (g.longest_rally || '-') + '</td></tr>').join('') +
             '</table>';
         }
         tgEl.classList.remove('loading');
         
       } catch (err) {
         console.error('Error loading analytics:', err);
-        document.querySelectorAll('.loading').forEach(el => {
-          el.innerHTML = '<span style="color:#ef4444">Failed to load</span>';
-          el.classList.remove('loading');
-        });
       }
     }
     
+    // Initial load
     loadAnalytics();
-    setInterval(loadAnalytics, 30000);
+    loadLiveFeed();
+    
+    // Live feed refreshes every 3s, analytics every 15s
+    setInterval(loadLiveFeed, 3000);
+    setInterval(loadAnalytics, 15000);
   </script>
 </body>
 </html>`;
