@@ -145,8 +145,8 @@ export default {
         }
       }
       
-      // Analytics dashboard page
-      if (url.pathname === '/analytics') {
+      // Analytics dashboard page (both paths)
+      if (url.pathname === '/analytics' || url.pathname === '/dashboard') {
         return new Response(ANALYTICS_HTML, {
           headers: { 'content-type': 'text/html; charset=utf-8' },
         });
@@ -464,7 +464,7 @@ const HOME_HTML = `<!DOCTYPE html>
     // Refresh stats every 10 seconds
     setInterval(loadStats, 10000);
   </script>
-  <div class="footer">✨ Built by <a href="https://spark.jeka.org">Spark</a> • Workers + Durable Objects + D1 + Hyperdrive</div>
+  <div class="footer"><a href="/dashboard">Dashboard</a> • Built by <a href="https://spark.jeka.org">Spark</a> • Workers + Durable Objects + D1 + Hyperdrive</div>
 </body>
 </html>`;
 
