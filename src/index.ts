@@ -585,9 +585,9 @@ const GAME_HTML = `<!DOCTYPE html>
       const y = Math.max(0.075, Math.min(0.925, (clientY - rect.top) / rect.height));
       localPaddleY = y; // immediate local update
       
-      // Throttle sends to ~30fps (every 33ms)
+      // Throttle sends to ~15/sec (every 66ms)
       const now = performance.now();
-      if (now - lastSendTime > 33) {
+      if (now - lastSendTime > 66) {
         ws.send(JSON.stringify({ type: 'paddle', y: y }));
         lastSendTime = now;
       }
@@ -694,18 +694,26 @@ const GAME_HTML = `<!DOCTYPE html>
       
       oscillator.start(audioCtx.currentTime);
       oscillator.stop(audioCtx.currentTime + duration);
+      
+      // Clean up after sound finishes to prevent memory leak
+      oscillator.onended = () => {
+        oscillator.disconnect();
+        gainNode.disconnect();
+      };
     }
     
-    // Screen shake effect
+    // Screen shake effect (cancel previous before starting new)
+    let activeShake = null;
     function shakeScreen() {
-      const originalTransform = canvas.style.transform;
+      if (activeShake) clearInterval(activeShake);
       let intensity = 10;
-      const shakeInterval = setInterval(() => {
+      activeShake = setInterval(() => {
         canvas.style.transform = \`translate(\${Math.random() * intensity - intensity/2}px, \${Math.random() * intensity - intensity/2}px)\`;
         intensity *= 0.9;
         if (intensity < 0.5) {
-          clearInterval(shakeInterval);
-          canvas.style.transform = originalTransform;
+          clearInterval(activeShake);
+          activeShake = null;
+          canvas.style.transform = '';
         }
       }, 50);
     }

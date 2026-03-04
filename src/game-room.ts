@@ -254,7 +254,13 @@ export class GameRoom extends DurableObject {
   }
   
   private gameTick() {
-    if (this.gameState.phase !== 'playing') return;
+    if (this.gameState.phase !== 'playing' && this.gameState.phase !== 'scored') return;
+    if (this.gameState.phase === 'scored') {
+      // During scored pause, still broadcast state but skip physics
+      this.broadcastCounter++;
+      if (this.broadcastCounter % 2 === 0) this.broadcastState();
+      return;
+    }
     
     // AI paddle movement (if enabled, AI is always player 2)
     if (this.aiEnabled) {
