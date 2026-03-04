@@ -620,8 +620,8 @@ const GAME_HTML = `<!DOCTYPE html>
     .cloud {
       position: absolute;
       border-radius: 50%;
-      background: radial-gradient(ellipse, rgba(255,255,255,0.04), transparent 70%);
-      filter: blur(20px);
+      background: radial-gradient(ellipse, rgba(255,255,255,0.12), rgba(249,115,22,0.06) 40%, transparent 70%);
+      filter: blur(25px);
       pointer-events: none;
       z-index: 0;
     }
@@ -740,6 +740,18 @@ const GAME_HTML = `<!DOCTYPE html>
     }
     .p1-name { color: #f97316; text-shadow: 0 0 8px rgba(249,115,22,0.4); }
     .p2-name { color: #8b5cf6; text-shadow: 0 0 8px rgba(139,92,246,0.4); }
+    .home-link {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      font-size: 0.9rem;
+      color: #f97316;
+      text-decoration: none;
+      opacity: 0.6;
+      transition: opacity 0.3s;
+      z-index: 20;
+    }
+    .home-link:hover { opacity: 1; }
     .scanlines {
       position: absolute;
       top: 0;
@@ -758,6 +770,7 @@ const GAME_HTML = `<!DOCTYPE html>
   </style>
 </head>
 <body>
+  <a href="/" class="home-link">← Home</a>
   <div class="player-names"><span id="p1name" class="p1-name"></span><span id="p2name" class="p2-name"></span></div>
   <div class="game-wrap">
     <div class="flare"></div>
