@@ -54,7 +54,10 @@ export class GameRoom extends DurableObject {
   private rallies: RallyStats[] = [];
   private gameStartTime: number | null = null;
   private aiEnabled: boolean = false;
-  private aiDifficulty: number = 0.7; // 0-1, how fast AI reacts
+  private aiDifficulty: number = 0.5; // 0-1, how fast AI reacts
+  private aiTargetY: number = 0.5; // where AI thinks ball will be
+  private aiReactionTimer: number = 0; // frames until AI recalculates
+  private aiMistakeOffset: number = 0; // deliberate error
   private roomId: string | null = null;
   
   constructor(ctx: DurableObjectState, env: Env) {
@@ -297,16 +300,41 @@ export class GameRoom extends DurableObject {
     // AI paddle movement (if enabled, AI is always player 2)
     if (this.aiEnabled) {
       const ball = this.gameState.ball;
-      const targetY = ball.y;
       const currentY = this.gameState.paddle2;
-      const diff = targetY - currentY;
-      // AI tracks the ball with some imperfection based on difficulty
-      const speed = 0.02 * this.aiDifficulty;
-      // Add slight randomness so AI isn't perfect
-      const jitter = (Math.random() - 0.5) * 0.01 * (1 - this.aiDifficulty);
-      if (Math.abs(diff) > 0.02) {
+      
+      // AI only recalculates target periodically (simulates reaction time)
+      this.aiReactionTimer--;
+      if (this.aiReactionTimer <= 0) {
+        // Reset reaction timer: lower difficulty = slower reactions
+        this.aiReactionTimer = Math.floor(8 + (1 - this.aiDifficulty) * 15);
+        
+        // AI predicts ball position but with error
+        this.aiTargetY = ball.y;
+        
+        // Add deliberate mistake: AI sometimes aims wrong
+        // Bigger mistakes at lower difficulty
+        const mistakeChance = 0.15 * (1 - this.aiDifficulty);
+        if (Math.random() < mistakeChance) {
+          this.aiMistakeOffset = (Math.random() - 0.5) * 0.3;
+        } else {
+          this.aiMistakeOffset = (Math.random() - 0.5) * 0.08;
+        }
+        
+        // AI only reacts well when ball is coming toward it (x velocity > 0)
+        if (ball.vx < 0) {
+          // Ball going away: AI drifts toward center lazily
+          this.aiTargetY = 0.5 + (Math.random() - 0.5) * 0.2;
+        }
+      }
+      
+      const target = this.aiTargetY + this.aiMistakeOffset;
+      const diff = target - currentY;
+      // Speed: lower difficulty = slower paddle
+      const speed = 0.008 + 0.012 * this.aiDifficulty;
+      
+      if (Math.abs(diff) > 0.03) {
         this.gameState.paddle2 = Math.max(0.075, Math.min(0.925,
-          currentY + Math.sign(diff) * speed + jitter
+          currentY + Math.sign(diff) * speed
         ));
       }
     }
