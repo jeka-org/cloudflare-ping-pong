@@ -612,11 +612,80 @@ const GAME_HTML = `<!DOCTYPE html>
       min-height: 100vh;
       overflow: hidden;
     }
+    .game-wrap {
+      position: relative;
+      padding: 40px 60px;
+    }
+    /* Cloud shapes */
+    .cloud {
+      position: absolute;
+      border-radius: 50%;
+      background: radial-gradient(ellipse, rgba(255,255,255,0.04), transparent 70%);
+      filter: blur(20px);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .cloud-1 { width: 200px; height: 80px; top: -30px; left: -40px; animation: cloud-drift 12s ease-in-out infinite alternate; }
+    .cloud-2 { width: 250px; height: 90px; top: -20px; right: -50px; animation: cloud-drift 15s ease-in-out infinite alternate-reverse; }
+    .cloud-3 { width: 180px; height: 70px; bottom: -20px; left: 20px; animation: cloud-drift 10s ease-in-out infinite alternate; }
+    .cloud-4 { width: 220px; height: 80px; bottom: -25px; right: 10px; animation: cloud-drift 14s ease-in-out infinite alternate-reverse; }
+    .cloud-5 { width: 160px; height: 60px; top: 40%; left: -50px; animation: cloud-drift 11s ease-in-out infinite alternate; }
+    .cloud-6 { width: 160px; height: 60px; top: 35%; right: -45px; animation: cloud-drift 13s ease-in-out infinite alternate-reverse; }
+    @keyframes cloud-drift {
+      0% { transform: translateX(0) translateY(0); opacity: 0.6; }
+      50% { opacity: 1; }
+      100% { transform: translateX(15px) translateY(-8px); opacity: 0.5; }
+    }
+    /* Flare: warm glow behind the canvas */
+    .flare {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 110%;
+      height: 110%;
+      background: radial-gradient(ellipse at center,
+        rgba(249,115,22,0.12) 0%,
+        rgba(251,191,36,0.06) 30%,
+        rgba(249,115,22,0.03) 50%,
+        transparent 70%
+      );
+      pointer-events: none;
+      z-index: 0;
+      animation: flare-pulse 4s ease-in-out infinite alternate;
+    }
+    @keyframes flare-pulse {
+      from { opacity: 0.7; transform: translate(-50%, -50%) scale(1); }
+      to { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+    }
+    /* Ember sparks floating up */
+    .ember {
+      position: absolute;
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: #f97316;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0;
+    }
+    .ember-1 { bottom: 10%; left: 15%; animation: ember-rise 3s ease-out infinite; animation-delay: 0s; }
+    .ember-2 { bottom: 5%; left: 45%; animation: ember-rise 4s ease-out infinite; animation-delay: 1s; }
+    .ember-3 { bottom: 8%; right: 20%; animation: ember-rise 3.5s ease-out infinite; animation-delay: 0.5s; }
+    .ember-4 { bottom: 12%; right: 35%; animation: ember-rise 5s ease-out infinite; animation-delay: 2s; }
+    .ember-5 { bottom: 3%; left: 70%; animation: ember-rise 3.8s ease-out infinite; animation-delay: 1.5s; }
+    @keyframes ember-rise {
+      0% { opacity: 0; transform: translateY(0) scale(1); }
+      10% { opacity: 0.8; }
+      80% { opacity: 0.3; }
+      100% { opacity: 0; transform: translateY(-120px) translateX(20px) scale(0.3); }
+    }
     #gameCanvas {
       border: 2px solid #f97316;
       box-shadow: 0 0 20px rgba(249,115,22,0.4), 0 0 40px rgba(249,115,22,0.2), inset 0 0 60px rgba(249,115,22,0.05);
       background: #0f0f0f;
       position: relative;
+      z-index: 1;
     }
     #status {
       position: absolute;
@@ -690,12 +759,26 @@ const GAME_HTML = `<!DOCTYPE html>
 </head>
 <body>
   <div class="player-names"><span id="p1name" class="p1-name"></span><span id="p2name" class="p2-name"></span></div>
-  <div style="position: relative;">
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
-    <div class="scanlines"></div>
-    <div id="status">CONNECTING...</div>
-    <button id="startBtn">START GAME 🔥</button>
-    <div id="latency"></div>
+  <div class="game-wrap">
+    <div class="flare"></div>
+    <div class="cloud cloud-1"></div>
+    <div class="cloud cloud-2"></div>
+    <div class="cloud cloud-3"></div>
+    <div class="cloud cloud-4"></div>
+    <div class="cloud cloud-5"></div>
+    <div class="cloud cloud-6"></div>
+    <div class="ember ember-1"></div>
+    <div class="ember ember-2"></div>
+    <div class="ember ember-3"></div>
+    <div class="ember ember-4"></div>
+    <div class="ember ember-5"></div>
+    <div style="position: relative;">
+      <canvas id="gameCanvas" width="800" height="600"></canvas>
+      <div class="scanlines"></div>
+      <div id="status">CONNECTING...</div>
+      <button id="startBtn">START GAME 🔥</button>
+      <div id="latency"></div>
+    </div>
   </div>
 
   <script>
