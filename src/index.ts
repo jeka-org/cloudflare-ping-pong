@@ -299,7 +299,7 @@ const HOME_HTML = `<!DOCTYPE html>
       box-shadow: 0 0 40px rgba(124,58,237,0.6), 0 0 60px rgba(139,92,246,0.3);
     }
     .stats {
-      margin-top: 3rem;
+      margin-top: 2rem;
       display: flex;
       gap: 3rem;
       flex-wrap: wrap;
@@ -307,54 +307,49 @@ const HOME_HTML = `<!DOCTYPE html>
       position: relative;
       z-index: 1;
     }
-    .stat {
-      text-align: center;
-    }
-    .stat-value {
-      font-size: 3rem;
-      color: #f97316;
-      text-shadow: 0 0 10px rgba(249,115,22,0.5);
-    }
-    .stat-label {
-      font-size: 1rem;
-      opacity: 0.5;
-      margin-top: 0.5rem;
-    }
-    .recent-games {
+    .stat { text-align: center; }
+    .stat-value { font-size: 3rem; color: #f97316; text-shadow: 0 0 10px rgba(249,115,22,0.5); }
+    .stat-label { font-size: 0.9rem; opacity: 0.5; margin-top: 0.3rem; }
+    .dashboard {
       margin-top: 3rem;
       width: 100%;
-      max-width: 800px;
+      max-width: 1000px;
       position: relative;
       z-index: 1;
     }
-    .recent-games h2 {
-      font-size: 1.5rem;
-      margin-bottom: 1rem;
-      text-align: center;
-      color: #fbbf24;
+    .dash-header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
     }
-    .game-item {
+    .dash-header h2 { font-size: 1.3rem; color: #fbbf24; }
+    .live-dot { display: inline-block; width: 8px; height: 8px; background: #22c55e; border-radius: 50%; animation: blink 1.5s infinite; }
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    .dash-grid-full { grid-column: 1 / -1; }
+    .card {
       background: rgba(249,115,22,0.05);
       border: 1px solid rgba(249,115,22,0.2);
-      padding: 1rem;
-      margin-bottom: 0.5rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      padding: 1.2rem;
     }
-    .game-score {
-      font-size: 1.5rem;
-      font-weight: bold;
-      color: #f97316;
-    }
-    .loading {
-      opacity: 0.5;
-      animation: pulse 1s infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 0.5; }
-      50% { opacity: 1; }
-    }
+    .card h3 { color: #fbbf24; font-size: 0.9rem; margin-bottom: 0.8rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid rgba(249,115,22,0.1); }
+    th { color: #fbbf24; font-size: 0.7rem; text-transform: uppercase; }
+    td { font-size: 0.85rem; }
+    .bar-container { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; }
+    .bar { height: 12px; background: linear-gradient(90deg, #f97316, #fbbf24); min-width: 2px; transition: width 0.3s; }
+    .event-feed { max-height: 300px; overflow-y: auto; }
+    .event-item { padding: 0.4rem 0; border-bottom: 1px solid rgba(249,115,22,0.08); display: flex; align-items: center; gap: 0.6rem; animation: fadeIn 0.3s; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+    .event-icon { font-size: 1.1rem; min-width: 22px; text-align: center; }
+    .event-text { font-size: 0.8rem; flex: 1; }
+    .event-time { font-size: 0.7rem; opacity: 0.4; min-width: 45px; text-align: right; }
+    .event-room { color: #f97316; font-size: 0.75rem; }
+    .loading { opacity: 0.5; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
     .footer {
       margin-top: 3rem;
       font-size: 0.8rem;
@@ -364,6 +359,7 @@ const HOME_HTML = `<!DOCTYPE html>
     }
     .footer a { color: #f97316; text-decoration: none; }
     .footer a:hover { opacity: 0.8; }
+    @media (max-width: 768px) { .dash-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -388,13 +384,74 @@ const HOME_HTML = `<!DOCTYPE html>
     </div>
   </div>
   
-  <div class="recent-games">
-    <h2>RECENT GAMES</h2>
-    <div id="recentGamesList" class="loading">Loading...</div>
+  <div class="dashboard">
+    <div class="dash-header">
+      <span class="live-dot"></span>
+      <h2>LIVE DASHBOARD</h2>
+      <span style="opacity:0.4;font-size:0.75rem;margin-left:0.5rem">Hyperdrive + Postgres</span>
+    </div>
+    
+    <div class="dash-grid">
+      <div class="card dash-grid-full">
+        <h3>LIVE EVENT FEED</h3>
+        <div id="liveFeed" class="event-feed loading">Waiting for events...</div>
+      </div>
+      <div class="card">
+        <h3>ACTIVITY (24H)</h3>
+        <div id="activity" class="loading">Loading...</div>
+      </div>
+      <div class="card">
+        <h3>TOP CITIES</h3>
+        <div id="cities" class="loading">Loading...</div>
+      </div>
+    </div>
   </div>
 
   <script>
-    // Load stats
+    const eventIcons = { player_joined: '🎮', point_scored: '⚡', game_over: '🏆' };
+    const eventLabels = { player_joined: 'Player joined', point_scored: 'Point scored', game_over: 'Game over' };
+    
+    function timeAgo(ts) {
+      const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+      if (s < 5) return 'now';
+      if (s < 60) return s + 's';
+      if (s < 3600) return Math.floor(s/60) + 'm';
+      return Math.floor(s/3600) + 'h';
+    }
+    
+    function renderEvent(e) {
+      const icon = eventIcons[e.event_type] || '•';
+      const label = eventLabels[e.event_type] || e.event_type;
+      let detail = '';
+      if (e.event_type === 'player_joined') {
+        detail = (e.city || 'Unknown') + (e.country ? ', ' + e.country : '') + (e.colo ? ' (via ' + e.colo + ')' : '');
+      } else if (e.event_type === 'point_scored' && e.metadata) {
+        const m = typeof e.metadata === 'string' ? JSON.parse(e.metadata) : e.metadata;
+        detail = (m.score1||0) + '-' + (m.score2||0) + (m.rally_hits ? ' (' + m.rally_hits + ' hits)' : '');
+      } else if (e.event_type === 'game_over' && e.metadata) {
+        const m = typeof e.metadata === 'string' ? JSON.parse(e.metadata) : e.metadata;
+        detail = 'P' + (e.player_slot||'?') + ' wins | ' + (m.score1||0) + '-' + (m.score2||0) + (m.duration_seconds ? ' | ' + m.duration_seconds + 's' : '');
+      }
+      return '<div class="event-item">' +
+        '<span class="event-icon">' + icon + '</span>' +
+        '<div class="event-text">' + label + '<br><span class="event-room">' + (e.room_id||'') + '</span> <span style="opacity:0.5;font-size:0.75rem">' + detail + '</span></div>' +
+        '<span class="event-time">' + timeAgo(e.timestamp) + '</span></div>';
+    }
+    
+    async function loadLiveFeed() {
+      try {
+        const res = await fetch('/api/events/live');
+        const data = await res.json();
+        const el = document.getElementById('liveFeed');
+        if (data.events && data.events.length > 0) {
+          el.innerHTML = data.events.map(renderEvent).join('');
+        } else {
+          el.innerHTML = '<span style="opacity:0.5">No events yet. Play a game!</span>';
+        }
+        el.classList.remove('loading');
+      } catch (err) { console.error('Live feed error:', err); }
+    }
+    
     async function loadStats() {
       try {
         const res = await fetch('/api/stats');
@@ -402,85 +459,78 @@ const HOME_HTML = `<!DOCTYPE html>
         document.getElementById('totalGames').textContent = data.stats.total_games;
         document.getElementById('activeGames').textContent = data.stats.active_games;
         document.getElementById('totalPlayers').textContent = data.stats.total_players;
-      } catch (err) {
-        console.error('Error loading stats:', err);
-      }
+      } catch (err) { console.error('Stats error:', err); }
     }
     
-    // Load recent games
-    async function loadRecentGames() {
+    async function loadAnalytics() {
       try {
-        const res = await fetch('/api/recent');
+        const res = await fetch('/api/analytics');
         const data = await res.json();
-        const list = document.getElementById('recentGamesList');
+        if (data.error) return;
         
-        if (data.games.length === 0) {
-          list.innerHTML = '<div style="text-align:center;opacity:0.5">No games yet. Be the first!</div>';
-          list.classList.remove('loading');
-          return;
+        const actEl = document.getElementById('activity');
+        if (data.activity.length === 0) {
+          actEl.innerHTML = '<span style="opacity:0.5">No activity in last 24h</span>';
+        } else {
+          const maxG = Math.max(...data.activity.map(a => parseInt(a.games)));
+          actEl.innerHTML = data.activity.slice(0,12).map(a => {
+            const hr = new Date(a.hour).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+            const pct = Math.max(5, (parseInt(a.games)/maxG)*100);
+            return '<div class="bar-container"><span style="min-width:50px;font-size:0.7rem">' + hr + '</span><div class="bar" style="width:' + pct + '%"></div><span style="font-size:0.7rem;opacity:0.5">' + a.games + '</span></div>';
+          }).join('');
         }
+        actEl.classList.remove('loading');
         
-        list.innerHTML = data.games.map(game => \`
-          <div class="game-item">
-            <div>
-              <strong>\${game.id}</strong><br>
-              <small>\${game.player1_city || '?'} vs \${game.player2_city || '?'}</small>
-            </div>
-            <div class="game-score">\${game.final_score || 'N/A'}</div>
-          </div>
-        \`).join('');
-        list.classList.remove('loading');
-      } catch (err) {
-        console.error('Error loading recent games:', err);
-        document.getElementById('recentGamesList').innerHTML = 
-          '<div style="text-align:center;opacity:0.5">Error loading games</div>';
-      }
+        const citEl = document.getElementById('cities');
+        if (data.cities.length === 0) {
+          citEl.innerHTML = '<span style="opacity:0.5">No city data yet</span>';
+        } else {
+          citEl.innerHTML = '<table><tr><th>City</th><th>Country</th><th>Games</th></tr>' +
+            data.cities.slice(0,8).map(c => '<tr><td>' + c.city + '</td><td>' + (c.country||'?') + '</td><td style="color:#f97316">' + c.games + '</td></tr>').join('') + '</table>';
+        }
+        citEl.classList.remove('loading');
+      } catch (err) { console.error('Analytics error:', err); }
     }
     
     // Create room
     document.getElementById('createBtn').addEventListener('click', async () => {
       const btn = document.getElementById('createBtn');
-      btn.disabled = true;
-      btn.textContent = 'CREATING...';
-      
+      btn.disabled = true; btn.textContent = 'CREATING...';
       try {
         const res = await fetch('/api/create', { method: 'POST' });
         const data = await res.json();
         window.location.href = data.url;
       } catch (err) {
-        console.error('Error creating room:', err);
-        alert('Error creating room. Please try again.');
-        btn.disabled = false;
-        btn.textContent = 'CREATE ROOM';
+        alert('Error creating room.');
+        btn.disabled = false; btn.textContent = 'CREATE ROOM';
       }
     });
     
     // Play vs AI
     document.getElementById('aiBtn').addEventListener('click', async () => {
       const btn = document.getElementById('aiBtn');
-      btn.disabled = true;
-      btn.textContent = 'CREATING...';
-      
+      btn.disabled = true; btn.textContent = 'CREATING...';
       try {
         const res = await fetch('/api/create', { method: 'POST' });
         const data = await res.json();
         window.location.href = data.url + '?ai=true';
       } catch (err) {
-        console.error('Error creating room:', err);
-        alert('Error creating room. Please try again.');
-        btn.disabled = false;
-        btn.textContent = 'PLAY VS AI 🤖';
+        alert('Error creating room.');
+        btn.disabled = false; btn.textContent = 'PLAY VS AI 🤖';
       }
     });
     
-    // Load data
+    // Load everything
     loadStats();
-    loadRecentGames();
+    loadLiveFeed();
+    loadAnalytics();
     
-    // Refresh stats every 10 seconds
+    // Live feed: 3s, stats: 10s, analytics: 15s
+    setInterval(loadLiveFeed, 3000);
     setInterval(loadStats, 10000);
+    setInterval(loadAnalytics, 15000);
   </script>
-  <div class="footer"><a href="/dashboard">Dashboard</a> • Built by <a href="https://spark.jeka.org">Spark</a> • Workers + Durable Objects + D1 + Hyperdrive</div>
+  <div class="footer">Built by <a href="https://spark.jeka.org">Spark</a> • Workers + Durable Objects + D1 + Hyperdrive</div>
 </body>
 </html>`;
 
