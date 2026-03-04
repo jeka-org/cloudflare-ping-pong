@@ -424,7 +424,7 @@ const HOME_HTML = `<!DOCTYPE html>
       const label = eventLabels[e.event_type] || e.event_type;
       let detail = '';
       if (e.event_type === 'player_joined') {
-        detail = (e.city || 'Unknown') + (e.country ? ', ' + e.country : '') + (e.colo ? ' (via ' + e.colo + ')' : '');
+        const m0 = e.metadata ? (typeof e.metadata === 'string' ? JSON.parse(e.metadata) : e.metadata) : {}; detail = (m0.name ? m0.name + ' from ' : '') + (e.city || 'Unknown') + (e.country ? ', ' + e.country : '') + (e.colo ? ' (via ' + e.colo + ')' : '');
       } else if (e.event_type === 'point_scored' && e.metadata) {
         const m = typeof e.metadata === 'string' ? JSON.parse(e.metadata) : e.metadata;
         detail = (m.score1||0) + '-' + (m.score2||0) + (m.rally_hits ? ' (' + m.rally_hits + ' hits)' : '');
@@ -601,6 +601,20 @@ const GAME_HTML = `<!DOCTYPE html>
       z-index: 10;
       pointer-events: none;
     }
+    .player-names {
+      position: absolute;
+      bottom: 8px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-size: 0.7rem;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .p1-name { color: rgba(249,115,22,0.6); }
+    .p2-name { color: rgba(139,92,246,0.6); }
     .scanlines {
       position: absolute;
       top: 0;
@@ -624,6 +638,7 @@ const GAME_HTML = `<!DOCTYPE html>
     <div class="scanlines"></div>
     <div id="status">CONNECTING...</div>
     <button id="startBtn">START GAME 🔥</button>
+    <div class="player-names"><span id="p1name" class="p1-name"></span><span id="p2name" class="p2-name"></span></div>
     <div id="latency"></div>
   </div>
 
@@ -634,6 +649,8 @@ const GAME_HTML = `<!DOCTYPE html>
     const startBtn = document.getElementById('startBtn');
     const latencyEl = document.getElementById('latency');
     let currentLatency = null;
+    let player1Name = 'Player 1';
+    let player2Name = 'Player 2';
     
     // Game state + interpolation (reuse objects, no allocations per frame)
     const ball = { x: 0.5, y: 0.5 };
@@ -682,7 +699,8 @@ const GAME_HTML = `<!DOCTYPE html>
         case 'role':
           myRole = data.role;
           mySlot = data.slot;
-          // Don't show player number, wait for waiting/ready status
+          if (data.name && mySlot === 1) { player1Name = data.name; document.getElementById('p1name').textContent = player1Name; }
+          if (data.name && mySlot === 2) { player2Name = data.name; document.getElementById('p2name').textContent = player2Name; }
           if (myRole === 'spectator') {
             statusEl.textContent = 'SPECTATING';
             setTimeout(() => { statusEl.style.opacity = '0'; }, 2000);
@@ -698,10 +716,14 @@ const GAME_HTML = `<!DOCTYPE html>
           statusEl.style.opacity = '1';
           statusEl.textContent = 'READY!';
           startBtn.style.display = 'block';
+          if (data.player1Name) { player1Name = data.player1Name; document.getElementById('p1name').textContent = player1Name; }
+          if (data.player2Name) { player2Name = data.player2Name; document.getElementById('p2name').textContent = player2Name; }
           break;
           
         case 'ai_opponent':
           statusEl.textContent = 'VS AI 🤖';
+          player2Name = 'AI 🤖';
+          document.getElementById('p2name').textContent = player2Name;
           break;
           
         case 'state':
@@ -1038,7 +1060,7 @@ const ANALYTICS_HTML = `<!DOCTYPE html>
       const label = eventLabels[e.event_type] || e.event_type;
       let detail = '';
       if (e.event_type === 'player_joined') {
-        detail = (e.city || 'Unknown') + (e.country ? ', ' + e.country : '') + (e.colo ? ' (via ' + e.colo + ')' : '');
+        const m0 = e.metadata ? (typeof e.metadata === 'string' ? JSON.parse(e.metadata) : e.metadata) : {}; detail = (m0.name ? m0.name + ' from ' : '') + (e.city || 'Unknown') + (e.country ? ', ' + e.country : '') + (e.colo ? ' (via ' + e.colo + ')' : '');
       } else if (e.event_type === 'point_scored' && e.metadata) {
         const m = typeof e.metadata === 'string' ? JSON.parse(e.metadata) : e.metadata;
         detail = (m.score1 || 0) + '-' + (m.score2 || 0) + (m.rally_hits ? ' (' + m.rally_hits + ' hits)' : '');

@@ -11,11 +11,13 @@ import {
   resetBall,
   createPaddle,
 } from './physics';
-import { saveGameResults as saveGameResultsD1 } from './d1-queries';
+import { saveGameResults as saveGameResultsD1, updateRoomPlaying } from './d1-queries';
+import { generatePlayerName } from './room-names';
 
 interface PlayerInfo {
   ws: WebSocket;
   slot: 1 | 2 | null; // null = spectator
+  name: string;
   colo: string | null;
   city: string | null;
   country: string | null;
@@ -107,6 +109,7 @@ export class GameRoom extends DurableObject {
     const playerInfo: PlayerInfo = {
       ws: server,
       slot: null, // will assign below
+      name: generatePlayerName(),
       colo: (cf?.colo as string) || null,
       city: (cf?.city as string) || null,
       country: (cf?.country as string) || null,
@@ -129,18 +132,27 @@ export class GameRoom extends DurableObject {
     
     this.players.set(server, playerInfo);
     
-    // Send role assignment
+    // Send role assignment with player name
     this.send(server, {
       type: 'role',
       role: playerInfo.slot ? `player${playerInfo.slot}` : 'spectator',
       slot: playerInfo.slot,
+      name: playerInfo.name,
     });
     
     // If we now have 2 players, set ready and let them start
     if ((!player1 && player2 && playerInfo.slot === 1) ||
         (player1 && !player2 && playerInfo.slot === 2)) {
       this.gameState.phase = 'ready';
-      this.broadcast({ type: 'ready', message: 'Both players connected! Press START' });
+      const allPlayers = Array.from(this.players.values());
+      const pp1 = allPlayers.find(p => p.slot === 1);
+      const pp2 = allPlayers.find(p => p.slot === 2);
+      this.broadcast({ 
+        type: 'ready', 
+        message: 'Both players connected! Press START',
+        player1Name: pp1?.name || 'Player 1',
+        player2Name: pp2?.name || 'Player 2',
+      });
     } else if (playerInfo.slot && !this.aiEnabled) {
       // Only one player so far
       this.send(server, { type: 'waiting', message: 'Waiting for Player 2...' });
@@ -151,6 +163,7 @@ export class GameRoom extends DurableObject {
       this.send(server, {
         type: 'ai_opponent',
         difficulty: this.aiDifficulty,
+        aiName: 'AI 🤖',
       });
       this.startCountdown();
     }
@@ -159,7 +172,7 @@ export class GameRoom extends DurableObject {
     await this.savePlayerConnection(playerInfo);
     
     // Log analytics
-    this.logEvent('player_joined', playerInfo.slot, playerInfo);
+    this.logEvent('player_joined', playerInfo.slot, playerInfo, { name: playerInfo.name });
     
     // Broadcast current state
     this.broadcastState();
@@ -405,6 +418,21 @@ export class GameRoom extends DurableObject {
   private startCountdown() {
     this.gameState.phase = 'countdown';
     this.gameState.countdownValue = 3;
+    
+    // Update D1 with player names
+    const players = Array.from(this.players.values());
+    const p1 = players.find(p => p.slot === 1);
+    const p2 = players.find(p => p.slot === 2);
+    if (this.roomId) {
+      this.ctx.waitUntil(
+        updateRoomPlaying(
+          this.env.DB,
+          this.roomId,
+          p1?.colo || null, p1?.city || null, p1?.name || null,
+          p2?.colo || null, p2?.city || null, this.aiEnabled ? 'AI 🤖' : (p2?.name || null)
+        ).catch(err => console.error('D1 update error:', err))
+      );
+    }
     
     const countdownInterval = setInterval(() => {
       if (this.gameState.countdownValue > 0) {

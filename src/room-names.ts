@@ -28,3 +28,12 @@ export function generateRoomName(): string {
   const noun = nouns[Math.floor(Math.random() * nouns.length)];
   return `${adjective}-${noun}`;
 }
+
+/**
+ * Generate a player display name like "Swift Fox"
+ */
+export function generatePlayerName(): string {
+  const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+  const noun = nouns[Math.floor(Math.random() * nouns.length)];
+  return adjective.charAt(0).toUpperCase() + adjective.slice(1) + ' ' + noun.charAt(0).toUpperCase() + noun.slice(1);
+}

@@ -12,6 +12,8 @@ export interface RoomRecord {
   player2_colo: string | null;
   player1_city: string | null;
   player2_city: string | null;
+  player1_name: string | null;
+  player2_name: string | null;
   winner_slot: number | null;
   final_score: string | null;
   total_rallies: number | null;
@@ -61,8 +63,10 @@ export async function updateRoomPlaying(
   roomId: string,
   player1Colo: string | null,
   player1City: string | null,
+  player1Name: string | null,
   player2Colo: string | null,
-  player2City: string | null
+  player2City: string | null,
+  player2Name: string | null
 ): Promise<void> {
   await db
     .prepare(
@@ -70,11 +74,13 @@ export async function updateRoomPlaying(
        SET status = 'playing',
            player1_colo = ?,
            player1_city = ?,
+           player1_name = ?,
            player2_colo = ?,
-           player2_city = ?
+           player2_city = ?,
+           player2_name = ?
        WHERE id = ?`
     )
-    .bind(player1Colo, player1City, player2Colo, player2City, roomId)
+    .bind(player1Colo, player1City, player1Name, player2Colo, player2City, player2Name, roomId)
     .run();
 }
 
