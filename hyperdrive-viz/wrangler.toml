@@ -1,0 +1,13 @@
+name = "hyperdrive-viz"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+routes = [
+  { pattern = "hyperdrive.jeka.org", custom_domain = true }
+]
+
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "ccb1ff52dfd043809598a5a3bbcaaca9"
+localConnectionString = "postgres://pong_user:aeqhbtOnb3GRiQPudS2tKtAt@localhost:5432/pong_analytics"
