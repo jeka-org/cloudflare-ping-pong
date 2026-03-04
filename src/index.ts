@@ -465,7 +465,7 @@ const GAME_HTML = `<!DOCTYPE html>
     const ctx = canvas.getContext('2d');
     const statusEl = document.getElementById('status');
     
-    // Game state
+    // Game state + interpolation
     let gameState = {
       ball: { x: 0.5, y: 0.5 },
       paddle1: 0.5,
@@ -474,8 +474,20 @@ const GAME_HTML = `<!DOCTYPE html>
       score2: 0,
       phase: 'waiting'
     };
+    let prevState = { ...gameState, ball: { ...gameState.ball } };
+    let stateTime = 0;
     let myRole = null;
     let mySlot = null;
+    
+    // Pre-cache gradients (avoid creating per frame)
+    const paddleHeight = canvas.height * 0.15;
+    const paddleWidth = canvas.width * 0.02;
+    const grad1 = ctx.createLinearGradient(0, 0, paddleWidth, 0);
+    grad1.addColorStop(0, '#f97316');
+    grad1.addColorStop(1, '#fbbf24');
+    const grad2 = ctx.createLinearGradient(canvas.width - paddleWidth, 0, canvas.width, 0);
+    grad2.addColorStop(0, '#8b5cf6');
+    grad2.addColorStop(1, '#7c3aed');
     
     // WebSocket connection
     const roomId = window.location.pathname.split('/')[2];
@@ -510,7 +522,9 @@ const GAME_HTML = `<!DOCTYPE html>
           break;
           
         case 'state':
+          prevState = { ...gameState, ball: { ...gameState.ball } };
           gameState = data;
+          stateTime = performance.now();
           break;
           
         case 'countdown':
@@ -576,11 +590,19 @@ const GAME_HTML = `<!DOCTYPE html>
     
     // Render loop
     function render() {
+      // Interpolation factor (smooth between server updates)
+      const elapsed = performance.now() - stateTime;
+      const t = Math.min(elapsed / 33, 1); // 33ms = ~30fps server rate
+      const lerpBallX = prevState.ball.x + (gameState.ball.x - prevState.ball.x) * t;
+      const lerpBallY = prevState.ball.y + (gameState.ball.y - prevState.ball.y) * t;
+      const lerpP1 = prevState.paddle1 + (gameState.paddle1 - prevState.paddle1) * t;
+      const lerpP2 = prevState.paddle2 + (gameState.paddle2 - prevState.paddle2) * t;
+      
       // Clear
       ctx.fillStyle = '#0f0f0f';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
-      // Center line
+      // Center line (no shadow needed)
       ctx.strokeStyle = 'rgba(249,115,22,0.3)';
       ctx.setLineDash([10, 10]);
       ctx.beginPath();
@@ -589,7 +611,7 @@ const GAME_HTML = `<!DOCTYPE html>
       ctx.stroke();
       ctx.setLineDash([]);
       
-      // Scores
+      // Scores (one shadow call for both)
       ctx.fillStyle = '#fbbf24';
       ctx.font = '48px "Courier New"';
       ctx.textAlign = 'center';
@@ -599,61 +621,43 @@ const GAME_HTML = `<!DOCTYPE html>
       ctx.fillText(gameState.score2, (canvas.width * 3) / 4, 60);
       ctx.shadowBlur = 0;
       
-      // Paddles
-      const paddleHeight = canvas.height * 0.15;
-      const paddleWidth = canvas.width * 0.02;
-      
-      // Left paddle (orange)
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = '#f97316';
-      const grad1 = ctx.createLinearGradient(0, 0, paddleWidth, 0);
-      grad1.addColorStop(0, '#f97316');
-      grad1.addColorStop(1, '#fbbf24');
+      // Left paddle (orange, cached gradient, no shadow)
       ctx.fillStyle = grad1;
       ctx.fillRect(
         0,
-        gameState.paddle1 * canvas.height - paddleHeight / 2,
+        lerpP1 * canvas.height - paddleHeight / 2,
         paddleWidth,
         paddleHeight
       );
       
-      // Right paddle (purple)
-      ctx.shadowColor = '#7c3aed';
-      const grad2 = ctx.createLinearGradient(canvas.width - paddleWidth, 0, canvas.width, 0);
-      grad2.addColorStop(0, '#8b5cf6');
-      grad2.addColorStop(1, '#7c3aed');
+      // Right paddle (purple, cached gradient, no shadow)
       ctx.fillStyle = grad2;
       ctx.fillRect(
         canvas.width - paddleWidth,
-        gameState.paddle2 * canvas.height - paddleHeight / 2,
+        lerpP2 * canvas.height - paddleHeight / 2,
         paddleWidth,
         paddleHeight
       );
       
-      // Ball with ember glow
-      const ballX = gameState.ball.x * canvas.width;
-      const ballY = gameState.ball.y * canvas.height;
+      // Ball - interpolated position
+      const ballX = lerpBallX * canvas.width;
+      const ballY = lerpBallY * canvas.height;
       const ballRadius = canvas.width * 0.01;
       
-      // Outer glow
-      ctx.shadowBlur = 30;
+      // Ember glow (single shadow call)
+      ctx.shadowBlur = 25;
       ctx.shadowColor = '#f97316';
-      const ballGrad = ctx.createRadialGradient(ballX, ballY, 0, ballX, ballY, ballRadius * 2);
-      ballGrad.addColorStop(0, '#fbbf24');
-      ballGrad.addColorStop(0.5, '#f97316');
-      ballGrad.addColorStop(1, 'rgba(220,38,38,0.3)');
-      ctx.fillStyle = ballGrad;
+      ctx.fillStyle = '#f97316';
       ctx.beginPath();
-      ctx.arc(ballX, ballY, ballRadius * 1.5, 0, Math.PI * 2);
+      ctx.arc(ballX, ballY, ballRadius, 0, Math.PI * 2);
       ctx.fill();
       
-      // Bright core
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(ballX, ballY, ballRadius * 0.5, 0, Math.PI * 2);
-      ctx.fill();
-      
+      // Bright core (no extra shadow)
       ctx.shadowBlur = 0;
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(ballX, ballY, ballRadius * 0.6, 0, Math.PI * 2);
+      ctx.fill();
       
       requestAnimationFrame(render);
     }

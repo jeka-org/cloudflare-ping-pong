@@ -46,7 +46,8 @@ export class GameRoom extends DurableObject {
   private gameState: GameState;
   private gameLoopInterval: number | null = null;
   private lastTickTime: number = Date.now();
-  private tickRate = 1000 / 60; // 60fps
+  private tickRate = 1000 / 60; // 60fps physics
+  private broadcastCounter = 0; // only broadcast every other tick (30fps network)
   private rallies: RallyStats[] = [];
   private gameStartTime: number | null = null;
   private aiEnabled: boolean = false;
@@ -356,8 +357,11 @@ export class GameRoom extends DurableObject {
       this.gameState.ball = ball;
     }
     
-    // Broadcast state to all players
-    this.broadcastState();
+    // Broadcast state every other tick (30fps network, 60fps physics)
+    this.broadcastCounter++;
+    if (this.broadcastCounter % 2 === 0) {
+      this.broadcastState();
+    }
   }
   
   private startCountdown() {
