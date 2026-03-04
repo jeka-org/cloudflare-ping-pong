@@ -526,6 +526,15 @@ const GAME_HTML = `<!DOCTYPE html>
       box-shadow: 0 0 40px rgba(249,115,22,0.6);
       transform: translate(-50%, -50%) scale(1.05);
     }
+    #latency {
+      position: absolute;
+      bottom: 8px;
+      right: 12px;
+      font-size: 0.75rem;
+      color: rgba(251,191,36,0.5);
+      z-index: 10;
+      pointer-events: none;
+    }
     .scanlines {
       position: absolute;
       top: 0;
@@ -549,6 +558,7 @@ const GAME_HTML = `<!DOCTYPE html>
     <div class="scanlines"></div>
     <div id="status">CONNECTING...</div>
     <button id="startBtn">START GAME 🔥</button>
+    <div id="latency"></div>
   </div>
 
   <script>
@@ -556,6 +566,8 @@ const GAME_HTML = `<!DOCTYPE html>
     const ctx = canvas.getContext('2d');
     const statusEl = document.getElementById('status');
     const startBtn = document.getElementById('startBtn');
+    const latencyEl = document.getElementById('latency');
+    let currentLatency = null;
     
     // Game state + interpolation (reuse objects, no allocations per frame)
     const ball = { x: 0.5, y: 0.5 };
@@ -589,6 +601,12 @@ const GAME_HTML = `<!DOCTYPE html>
     ws.onopen = () => {
       console.log('Connected to game room');
       statusEl.textContent = 'CONNECTED';
+      // Start latency measurement
+      setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+        }
+      }, 3000);
     };
     
     ws.onmessage = (event) => {
@@ -656,6 +674,15 @@ const GAME_HTML = `<!DOCTYPE html>
           statusEl.style.opacity = '1';
           statusEl.textContent = \`PLAYER \${data.winner} WINS!\`;
           playSound(1000, 0.5);
+          break;
+          
+        case 'pong':
+          if (data.timestamp) {
+            currentLatency = Date.now() - data.timestamp;
+            latencyEl.textContent = currentLatency + 'ms';
+            latencyEl.style.color = currentLatency < 50 ? 'rgba(74,222,128,0.6)' : 
+                                     currentLatency < 100 ? 'rgba(251,191,36,0.6)' : 'rgba(239,68,68,0.6)';
+          }
           break;
       }
     };
