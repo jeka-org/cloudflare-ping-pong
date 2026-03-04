@@ -3,19 +3,6 @@
 
 **URL:** `pong.jeka.org`
 **Stack:** Workers + Durable Objects + D1 + Hyperdrive + Postgres
----
-
-- Real-time multiplayer via WebSockets + Durable Objects (authoritative server physics)
-- AI opponent for solo play with adjustable difficulty
-- Client-side paddle prediction for zero-lag input response
-- Start Game button: either player can start when both are connected
-- Waiting room: "Waiting for Player 2..." status until opponent joins
-- Recent games feed on homepage (persisted to D1)
-- Global stats: total games, active games, player count
-- Retro Spark-themed UI: ember glow, warm orange/gold palette, scanlines
-- Sound effects via Web Audio API (no external assets)
-- Performance optimized: zero-allocation render loop, throttled network sends
-- Built by [Spark](https://spark.jeka.org)
 
 ---
 
@@ -990,114 +977,15 @@ pong/
 
 ---
 
-## Accounts & Keys - What You Need to Sign Up For
+## Setup
 
-### 1. Cloudflare (you already have an account)
-**Upgrade to Workers Paid Plan ($5/mo):**
-- Go to: https://dash.cloudflare.com → Workers & Pages → Plans → Select "Workers Paid"
-- This unlocks: Durable Objects, D1, Hyperdrive, higher limits
+### Prerequisites
+- Cloudflare Workers Paid plan ($5/mo) for Durable Objects, D1, and Hyperdrive
+- A Postgres instance accessible from the internet (for analytics via Hyperdrive)
 
-**Get your Cloudflare API token** (for Wrangler CLI):
-- Go to: https://dash.cloudflare.com/profile/api-tokens
-- Click "Create Token"
-- Use the **"Edit Cloudflare Workers"** template (gives access to Workers, D1, DO, R2)
-- Copy the token - the OpenClaw bot will need this
-- Also note your **Account ID** (visible on any Workers page in the dashboard)
-
-**Keys to provide to OpenClaw:**
+### Credentials needed
 ```
 CLOUDFLARE_API_TOKEN=<your-token>
 CLOUDFLARE_ACCOUNT_ID=<your-account-id>
+POSTGRES_CONNECTION_STRING=postgres://user:pass@host:5432/pong_analytics
 ```
-
-### 2. VPS Postgres
-**On your VPS**, set up a Postgres database for analytics:
-```bash
-# Install Postgres if not already present
-sudo apt update && sudo apt install postgresql postgresql-contrib
-
-# Create database and user
-sudo -u postgres createuser pong_user -P  # set a strong password
-sudo -u postgres createdb pong_analytics -O pong_user
-```
-
-**Expose Postgres to Hyperdrive (pick one):**
-
-**Option A: Cloudflare Tunnel (recommended - no public port needed)**
-```bash
-# Install cloudflared on VPS
-curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
-chmod +x cloudflared && sudo mv cloudflared /usr/local/bin/
-cloudflared tunnel login
-cloudflared tunnel create pong-db
-# Configure tunnel to forward TCP to localhost:5432
-# Use the tunnel hostname in the Hyperdrive connection string
-```
-
-**Option B: Public IP (simpler, less secure)**
-```bash
-# Edit pg_hba.conf to allow Cloudflare IPs
-# Edit postgresql.conf: listen_addresses = '*'
-sudo systemctl restart postgresql
-# Use your VPS public IP in the Hyperdrive connection string
-```
-
-**Key to provide to OpenClaw:**
-```
-POSTGRES_CONNECTION_STRING=postgres://pong_user:PASSWORD@VPS_HOST:5432/pong_analytics
-```
-
-### 3. That's it
-No other accounts needed. Everything else (DNS, domain, hosting) is already on Cloudflare. Postgres runs on your own VPS.
-
-### Summary for OpenClaw
-
-Give it the spec file path and these credentials:
-
-```
-Read the spec at ~/dev/cloudflare/pong-spec.md and build the project.
-
-Credentials:
-- Cloudflare API Token: <token>
-- Cloudflare Account ID: <account-id>
-- VPS Postgres connection string: postgres://pong_user:PASSWORD@VPS_HOST:5432/pong_analytics
-- Domain: pong.jeka.org (jeka.org already on Cloudflare DNS)
-
-Steps:
-1. Read the full spec
-2. Scaffold the project at ~/dev/cloudflare/pong/
-3. Install dependencies (wrangler, vitest, @cloudflare/vitest-pool-workers)
-4. Implement: Worker, GameRoom DO, Dashboard DO, physics engine, frontend, D1 schema, Hyperdrive analytics
-5. Write tests (physics unit tests, DO integration tests, D1 tests, Worker route tests)
-6. Run tests to verify everything passes
-7. Create the D1 database: wrangler d1 create pong-db
-8. Create the Hyperdrive config: wrangler hyperdrive create pong-analytics --connection-string="<postgres-string>"
-9. Run D1 migrations
-10. Run Postgres migrations against VPS Postgres (psql -f ./schema/postgres-schema.sql)
-11. Deploy: wrangler deploy
-12. Verify pong.jeka.org loads and works
-```
-
----
-
-## Estimated Build Time
-
-| Component | Time |
-|-----------|------|
-| Worker routing + room creation | 1 hour |
-| Durable Object - GameRoom (WebSocket + game loop) | 2-3 hours |
-| Durable Object - Dashboard (event aggregation) | 1-2 hours |
-| Physics engine (ball, paddles, collisions, scoring) | 1-2 hours |
-| Frontend game canvas (retro style) | 2-3 hours |
-| Frontend architecture dashboard | 2-3 hours |
-| Client-side prediction + server reconciliation | 1-2 hours |
-| D1 schema + leaderboard | 1 hour |
-| Hyperdrive + Postgres analytics | 1-2 hours |
-| Tests (physics, DO, D1, Worker, analytics) | 2-3 hours |
-| Sound effects + polish | 1 hour |
-| Mobile touch controls | 30 min |
-| Deployment + verification | 1 hour |
-| **Total** | **~16-22 hours** |
-
-A working "play pong with someone" demo in a weekend. The architecture dashboard and analytics are stretch goals.
-
