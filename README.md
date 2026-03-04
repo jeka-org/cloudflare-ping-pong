@@ -5,6 +5,21 @@
 **Stack:** Workers + Durable Objects + D1 + Hyperdrive + Postgres
 ---
 
+## Current Features
+- **Real-time multiplayer** via WebSockets + Durable Objects (authoritative server physics)
+- **AI opponent** for solo play with adjustable difficulty
+- **Client-side paddle prediction** for zero-lag input response
+- **Start Game button** - either player can start when both are connected
+- **Waiting room** - "Waiting for Player 2..." status until opponent joins
+- **Recent games feed** on homepage (persisted to D1)
+- **Global stats** - total games, active games, player count
+- **Retro Spark-themed UI** - ember glow, warm orange/gold palette, scanlines
+- **Sound effects** via Web Audio API (no external assets)
+- **Performance optimized** - zero-allocation render loop, no canvas shadowBlur, throttled network sends
+- **Built by [Spark](https://spark.jeka.org)**
+
+---
+
 ## Background & Context
 
 ### What is this?
@@ -111,23 +126,31 @@ id = "<created-at-deploy>"
 
 ## User Flow
 
-### Quick play
+### Quick play (multiplayer)
 1. Visit `pong.jeka.org`
 2. Click "Create Room" → get a link like `pong.jeka.org/r/swift-fox`
 3. Share the link with your opponent
 4. They click it → both players connected via WebSocket to the same DO
-5. 3-2-1 countdown → pong
-6. First to 5 points wins
+5. Status shows "Waiting for Player 2..." until opponent joins
+6. Both players see "READY!" and a START GAME button appears
+7. Either player clicks START → 3-2-1 countdown → pong
+8. First to 5 points wins
+
+### Play vs AI
+1. Visit `pong.jeka.org`
+2. Click "Play vs AI 🤖"
+3. Countdown starts immediately → play against the AI opponent
+4. AI tracks the ball with slight imperfection (difficulty adjustable)
 
 ### Join flow
 1. Open `pong.jeka.org/r/swift-fox`
-2. If room has space → you're Player 2, game starts
+2. If room has space → you're Player 2, both get START button
 3. If room is full → you're a spectator (watch in real-time)
 4. If room doesn't exist → "This room has expired"
 
 ### After the game
-- Results screen: who won, rally stats, latency between players
-- "Play again?" or "Share result"
+- Results saved to D1, shown on homepage under "Recent Games"
+- Game stats: scores, rally count, longest rally, duration
 - Result saved to leaderboard
 
 ---

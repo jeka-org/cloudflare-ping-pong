@@ -11,6 +11,7 @@ import {
   resetBall,
   createPaddle,
 } from './physics';
+import { saveGameResults as saveGameResultsD1 } from './d1-queries';
 
 interface PlayerInfo {
   ws: WebSocket;
@@ -28,7 +29,7 @@ interface GameState {
   paddle2: number; // y position
   score1: number;
   score2: number;
-  phase: 'waiting' | 'countdown' | 'playing' | 'scored' | 'finished';
+  phase: 'waiting' | 'ready' | 'countdown' | 'playing' | 'scored' | 'finished';
   countdownValue: number;
   rallyHits: number;
   currentRallyStart: number | null;
@@ -52,6 +53,7 @@ export class GameRoom extends DurableObject {
   private gameStartTime: number | null = null;
   private aiEnabled: boolean = false;
   private aiDifficulty: number = 0.7; // 0-1, how fast AI reacts
+  private roomId: string | null = null;
   
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -82,8 +84,12 @@ export class GameRoom extends DurableObject {
       return new Response('Expected WebSocket upgrade', { status: 426 });
     }
     
-    // Check if AI opponent requested
+    // Capture room ID from URL
     const url = new URL(request.url);
+    const pathParts = url.pathname.split('/');
+    this.roomId = pathParts[2] || null;
+    
+    // Check if AI opponent requested
     if (url.searchParams.get('ai') === 'true') {
       this.aiEnabled = true;
       const diff = url.searchParams.get('difficulty');
@@ -130,11 +136,14 @@ export class GameRoom extends DurableObject {
       slot: playerInfo.slot,
     });
     
-    // If we now have 2 players, start countdown
-    if (!player1 && player2 && playerInfo.slot === 1) {
-      this.startCountdown();
-    } else if (player1 && !player2 && playerInfo.slot === 2) {
-      this.startCountdown();
+    // If we now have 2 players, set ready and let them start
+    if ((!player1 && player2 && playerInfo.slot === 1) ||
+        (player1 && !player2 && playerInfo.slot === 2)) {
+      this.gameState.phase = 'ready';
+      this.broadcast({ type: 'ready', message: 'Both players connected! Press START' });
+    } else if (playerInfo.slot && !this.aiEnabled) {
+      // Only one player so far
+      this.send(server, { type: 'waiting', message: 'Waiting for Player 2...' });
     }
     
     // If AI mode and first player just connected, start immediately
@@ -174,6 +183,13 @@ export class GameRoom extends DurableObject {
             this.gameState.paddle1 = Math.max(0.075, Math.min(0.925, data.y));
           } else if (player.slot === 2) {
             this.gameState.paddle2 = Math.max(0.075, Math.min(0.925, data.y));
+          }
+          break;
+          
+        case 'start_game':
+          // Any player can request game start
+          if (player.slot && this.gameState.phase === 'ready') {
+            this.startCountdown();
           }
           break;
           
@@ -495,7 +511,7 @@ export class GameRoom extends DurableObject {
     try {
       const sql = this.ctx.storage.sql;
       
-      // Save rallies
+      // Save rallies to DO local storage
       for (const rally of this.rallies) {
         sql.exec(
           `INSERT INTO rallies (started_at, ended_at, hits, winner_slot) VALUES (?, ?, ?, ?)`,
@@ -506,19 +522,41 @@ export class GameRoom extends DurableObject {
         );
       }
       
-      // Save final game state
+      const longestRally = this.rallies.length > 0 ? Math.max(...this.rallies.map((r) => r.hits)) : 0;
+      const duration = this.gameStartTime ? (Date.now() - this.gameStartTime) / 1000 : 0;
+      const winnerSlot = this.gameState.score1 >= 5 ? 1 : 2;
+      
+      // Save final game state to DO local storage
       const gameData = JSON.stringify({
         score1: this.gameState.score1,
         score2: this.gameState.score2,
         rallies: this.rallies.length,
-        longestRally: Math.max(...this.rallies.map((r) => r.hits), 0),
-        duration: this.gameStartTime ? (Date.now() - this.gameStartTime) / 1000 : 0,
+        longestRally,
+        duration,
       });
       
       sql.exec(
         `INSERT OR REPLACE INTO game_state (key, value) VALUES ('final_result', ?)`,
         gameData
       );
+      
+      // Also save to D1 so homepage can show recent games
+      if (this.roomId) {
+        try {
+          await saveGameResultsD1(
+            this.env.DB,
+            this.roomId,
+            winnerSlot,
+            this.gameState.score1,
+            this.gameState.score2,
+            this.rallies.length,
+            longestRally,
+            Math.round(duration)
+          );
+        } catch (d1Err) {
+          console.error('Error saving to D1:', d1Err);
+        }
+      }
     } catch (err) {
       console.error('Error saving game results:', err);
     }

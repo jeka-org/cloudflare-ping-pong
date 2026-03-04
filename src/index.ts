@@ -282,7 +282,6 @@ const HOME_HTML = `<!DOCTYPE html>
 </head>
 <body>
   <h1>🔥 GLOBAL PONG 🔥</h1>
-  <div class="spark-badge">✨ built by Spark</div>
   <div class="subtitle">Real-Time Multiplayer on Cloudflare's Edge</div>
   
   <button class="button" id="createBtn">CREATE ROOM</button>
@@ -395,7 +394,7 @@ const HOME_HTML = `<!DOCTYPE html>
     // Refresh stats every 10 seconds
     setInterval(loadStats, 10000);
   </script>
-  <div class="footer">✨ Powered by <a href="https://jeka.org">Spark</a> • Workers + Durable Objects + D1 + Hyperdrive</div>
+  <div class="footer">✨ Built by <a href="https://spark.jeka.org">Spark</a> • Workers + Durable Objects + D1 + Hyperdrive</div>
 </body>
 </html>`;
 
@@ -436,6 +435,27 @@ const GAME_HTML = `<!DOCTYPE html>
       z-index: 10;
       pointer-events: none;
     }
+    #startBtn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: linear-gradient(135deg, #f97316, #ea580c);
+      color: #000;
+      border: none;
+      padding: 1rem 3rem;
+      font-size: 1.5rem;
+      font-family: 'Courier New', monospace;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 0 20px rgba(249,115,22,0.4);
+      z-index: 15;
+      display: none;
+    }
+    #startBtn:hover {
+      box-shadow: 0 0 40px rgba(249,115,22,0.6);
+      transform: translate(-50%, -50%) scale(1.05);
+    }
     .scanlines {
       position: absolute;
       top: 0;
@@ -458,12 +478,14 @@ const GAME_HTML = `<!DOCTYPE html>
     <canvas id="gameCanvas" width="800" height="600"></canvas>
     <div class="scanlines"></div>
     <div id="status">CONNECTING...</div>
+    <button id="startBtn">START GAME 🔥</button>
   </div>
 
   <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const statusEl = document.getElementById('status');
+    const startBtn = document.getElementById('startBtn');
     
     // Game state + interpolation (reuse objects, no allocations per frame)
     const ball = { x: 0.5, y: 0.5 };
@@ -514,6 +536,17 @@ const GAME_HTML = `<!DOCTYPE html>
           setTimeout(() => { statusEl.style.opacity = '0'; }, 2000);
           break;
           
+        case 'waiting':
+          statusEl.style.opacity = '1';
+          statusEl.textContent = data.message;
+          break;
+          
+        case 'ready':
+          statusEl.style.opacity = '1';
+          statusEl.textContent = 'READY!';
+          startBtn.style.display = 'block';
+          break;
+          
         case 'ai_opponent':
           statusEl.textContent = 'VS AI 🤖';
           break;
@@ -530,12 +563,14 @@ const GAME_HTML = `<!DOCTYPE html>
           break;
           
         case 'countdown':
+          startBtn.style.display = 'none';
           statusEl.style.opacity = '1';
           statusEl.textContent = data.value;
           playSound(800, 0.1);
           break;
           
         case 'game_start':
+          startBtn.style.display = 'none';
           statusEl.style.opacity = '0';
           playSound(1200, 0.2);
           break;
@@ -597,6 +632,11 @@ const GAME_HTML = `<!DOCTYPE html>
     
     canvas.addEventListener('mousemove', handleInput);
     canvas.addEventListener('touchmove', handleInput);
+    
+    startBtn.addEventListener('click', () => {
+      ws.send(JSON.stringify({ type: 'start_game' }));
+      startBtn.style.display = 'none';
+    });
     
     // Render loop
     function render() {
