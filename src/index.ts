@@ -90,9 +90,9 @@ export default {
           const client = new pg.Client(env.HYPERDRIVE.connectionString);
           await client.connect();
           await client.query(
-            `INSERT INTO game_events (room_id, event_type, player_slot, colo, city, country, metadata)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [event.room_id, event.event_type, event.player_slot, event.colo, event.city, event.country, JSON.stringify(event.metadata || {})]
+            `INSERT INTO game_events (room_id, event_type, player_slot, colo, city, country, latitude, longitude, metadata)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [event.room_id, event.event_type, event.player_slot, event.colo, event.city, event.country, event.latitude, event.longitude, JSON.stringify(event.metadata || {})]
           );
           await client.end();
           return Response.json({ ok: true }, { headers: corsHeaders });

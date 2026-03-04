@@ -21,6 +21,8 @@ interface PlayerInfo {
   colo: string | null;
   city: string | null;
   country: string | null;
+  latitude: number | null;
+  longitude: number | null;
   latency: number | null;
   connectedAt: string;
 }
@@ -116,6 +118,8 @@ export class GameRoom extends DurableObject {
       colo: (cf?.colo as string) || null,
       city: (cf?.city as string) || null,
       country: (cf?.country as string) || null,
+      latitude: parseFloat(cf?.latitude as string) || null,
+      longitude: parseFloat(cf?.longitude as string) || null,
       latency: null,
       connectedAt: new Date().toISOString(),
     };
@@ -643,6 +647,8 @@ export class GameRoom extends DurableObject {
       colo: playerInfo?.colo || null,
       city: playerInfo?.city || null,
       country: playerInfo?.country || null,
+      latitude: playerInfo?.latitude || null,
+      longitude: playerInfo?.longitude || null,
       metadata,
     });
     // Use waitUntil so it doesn't block game logic
