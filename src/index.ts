@@ -528,12 +528,11 @@ const GAME_HTML = `<!DOCTYPE html>
         case 'role':
           myRole = data.role;
           mySlot = data.slot;
+          // Don't show player number, wait for waiting/ready status
           if (myRole === 'spectator') {
             statusEl.textContent = 'SPECTATING';
-          } else {
-            statusEl.textContent = \`PLAYER \${mySlot}\`;
+            setTimeout(() => { statusEl.style.opacity = '0'; }, 2000);
           }
-          setTimeout(() => { statusEl.style.opacity = '0'; }, 2000);
           break;
           
         case 'waiting':
