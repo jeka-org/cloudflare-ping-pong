@@ -48,7 +48,60 @@ The entire application is hosted on Cloudflare's platform:
 - **Scheduling**: DO Alarms for room expiry
 - **Audio**: Web Audio API (browser-native, no CDN dependency)
 
-The only external dependency is a Postgres instance running on a VPS, accessed via Hyperdrive. This is intentional: Hyperdrive exists to make existing databases fast at the edge, and using a self-hosted Postgres is more realistic than a serverless provider (most companies have their own Postgres).
+The only external dependency is a Postgres instance running on a VPS, accessed via Hyperdrive (either via public IP or Cloudflare Tunnel for secure private access). This is intentional: Hyperdrive exists to make existing databases fast at the edge, and using a self-hosted Postgres is more realistic than a serverless provider (most companies have their own Postgres).
+
+Cloudflare positions Durable Objects as the foundation for real-time applications, AI agents, and collaborative tools. This game is a good test of that claim.
+
+### How to deploy
+```bash
+# Create D1 database
+wrangler d1 create pong-db
+
+# Create Hyperdrive config (pointing to VPS Postgres)
+# Option A: via Cloudflare Tunnel (recommended)
+wrangler hyperdrive create pong-analytics \
+  --connection-string="postgres://pong_user:PASSWORD@TUNNEL_HOSTNAME/pong_analytics"
+# Option B: via public IP
+wrangler hyperdrive create pong-analytics \
+  --connection-string="postgres://pong_user:PASSWORD@YOUR_VPS_IP:5432/pong_analytics"
+
+# Run D1 migrations
+wrangler d1 execute pong-db --file=./schema/d1-schema.sql
+
+# Run Postgres migrations
+psql $POSTGRES_CONNECTION_STRING -f ./schema/postgres-schema.sql
+
+# Deploy - live at pong.jeka.org
+wrangler deploy
+```
+
+### wrangler.toml
+```toml
+name = "global-pong"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+routes = [
+  { pattern = "pong.jeka.org", custom_domain = true }
+]
+
+[[durable_objects.bindings]]
+name = "GAME_ROOM"
+class_name = "GameRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameRoom"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pong-db"
+database_id = "<created-at-deploy>"
+
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "<created-at-deploy>"
+```
 
 ---
 
@@ -110,14 +163,51 @@ The only external dependency is a Postgres instance running on a VPS, accessed v
 ```
 
 ### Worker
+
+**What it does:**
 - Serves the game frontend (canvas-based, inline HTML in index.ts)
 - Routes `/r/:roomId` to the correct Durable Object
 - Upgrades HTTP to WebSocket for the game connection
 - Generates human-readable room and player names ("swift-fox", "Bold Tiger")
 - Serves the homepage with live dashboard, stats, and recent games
-- API endpoints: `/api/create`, `/api/stats`, `/api/recent`, `/api/analytics`, `/api/events/live`, `/api/event`
+- API endpoints for room creation, stats, analytics, and event logging
+
+**Code shape:**
+```typescript
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+
+    // Serve frontend
+    if (url.pathname === '/') return new Response(HOME_HTML, { headers: { 'content-type': 'text/html' }});
+
+    // Route to game room
+    if (url.pathname.startsWith('/r/')) {
+      const roomId = url.pathname.split('/')[2];
+      const id = env.GAME_ROOM.idFromName(roomId);
+      const room = env.GAME_ROOM.get(id);
+      return room.fetch(request);
+    }
+
+    // Create new room
+    if (url.pathname === '/api/create') {
+      const roomId = generateRoomName(); // "swift-fox"
+      await createRoom(env.DB, roomId, request.cf);
+      return Response.json({ roomId, url: `/r/${roomId}` });
+    }
+
+    // Analytics from Postgres via Hyperdrive
+    if (url.pathname === '/api/analytics') {
+      const client = new pg.Client(env.HYPERDRIVE.connectionString);
+      // ... activity, cities, topGames, eventCount queries
+    }
+  }
+};
+```
 
 ### Durable Object: GameRoom
+
+**What it does:**
 - Manages one game room (2 players + spectators)
 - Runs authoritative game physics at 60fps via `setInterval`
 - Broadcasts state to all connected clients via WebSocket
@@ -132,6 +222,61 @@ This is the textbook DO use case. Each game room needs:
 2. **Authoritative state**: single-threaded means no physics race conditions
 3. **Low latency**: game state and compute in same thread, no DB round-trip
 4. **Natural lifecycle**: room exists while game is active, self-destructs after
+
+**Game state in DO SQLite:**
+```sql
+CREATE TABLE players (
+  slot INTEGER PRIMARY KEY,  -- 1 or 2
+  connected_at TEXT,
+  colo TEXT,
+  city TEXT,
+  country TEXT
+);
+
+CREATE TABLE game_results (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  winner_slot INTEGER,
+  final_score TEXT,
+  total_rallies INTEGER,
+  longest_rally INTEGER,
+  duration_seconds REAL
+);
+```
+
+**Game loop:**
+```typescript
+class GameRoom extends DurableObject {
+  players: Map<WebSocket, PlayerInfo> = new Map();
+  gameState: { ball, paddle1, paddle2, score1, score2, phase };
+
+  async webSocketMessage(ws: WebSocket, msg: string) {
+    const data = JSON.parse(msg);
+    if (data.type === 'paddle') {
+      const player = this.players.get(ws);
+      if (player?.slot === 1) this.gameState.paddle1 = data.y;
+      if (player?.slot === 2) this.gameState.paddle2 = data.y;
+    }
+  }
+
+  startGameLoop() {
+    this.gameLoop = setInterval(() => {
+      // AI paddle movement (if enabled)
+      if (this.aiEnabled) {
+        // Reaction delay, deliberate mistakes, lazy when ball going away
+      }
+
+      // Update ball, check collisions, check scoring
+      let ball = updateBall(this.gameState.ball);
+      ball = checkWallBounce(ball);
+      // Paddle collisions add angle based on hit position
+      // Ball speeds up after each hit
+
+      // Broadcast state to all connected players + spectators
+      this.broadcast({ type: 'state', ball, paddle1, paddle2, score1, score2, phase });
+    }, 1000 / 60); // 60fps server-side tick
+  }
+}
+```
 
 **Why not a client-side game loop?**
 Server-authoritative physics means:
@@ -194,7 +339,30 @@ CREATE TABLE game_events (
   country TEXT,
   metadata JSONB                -- { score1, score2, rally_hits, duration_seconds, name, ... }
 );
+
+-- Example analytics queries (run via Hyperdrive):
+
+-- 24h activity by hour
+SELECT date_trunc('hour', timestamp) AS hour,
+       COUNT(DISTINCT room_id) AS games, COUNT(*) AS events
+FROM game_events WHERE timestamp > NOW() - INTERVAL '24 hours'
+GROUP BY 1 ORDER BY 1 DESC;
+
+-- Geographic player distribution
+SELECT city, country, COUNT(DISTINCT room_id) AS games
+FROM game_events WHERE city IS NOT NULL
+GROUP BY city, country ORDER BY games DESC;
+
+-- Top games by points scored
+SELECT room_id,
+       COUNT(*) FILTER (WHERE event_type = 'point_scored') AS points,
+       MAX((metadata->>'rally_hits')::int) AS longest_rally
+FROM game_events
+WHERE event_type IN ('point_scored', 'game_over')
+GROUP BY room_id ORDER BY points DESC;
 ```
+
+**Hyperdrive cache note:** Analytics queries avoid `NOW()` in parameterized form where possible, letting Hyperdrive cache read-heavy dashboard queries. The live event feed uses `ORDER BY timestamp DESC LIMIT 20` which naturally expires from cache as new events arrive.
 
 ---
 
@@ -227,7 +395,10 @@ CREATE TABLE game_events (
 5. **Spectating** (`/r/swift-fox` with 2+ players already): watch live in real-time
 
 ### Latency display
-Shows the player's ping to the DO in real-time during gameplay (WebSocket ping/pong frames). This is both a game feature and a Cloudflare network demonstration.
+Shows the player's ping to the DO in real-time during gameplay (WebSocket ping/pong frames). This is both a game feature and a Cloudflare network demonstration:
+```
+12ms (SEA)
+```
 
 ---
 
@@ -243,6 +414,25 @@ The homepage includes a real-time dashboard powered by Postgres via Hyperdrive:
 - **Recent games**: Completed matches with player names, cities, and scores (from D1, refreshes every 30s)
 
 All dashboard data uses `setHTML()` diffing to avoid visual flicker on refresh cycles.
+
+---
+
+## Testing
+
+Testing uses **Vitest** with `@cloudflare/vitest-pool-workers` for testing Workers, D1, and Durable Objects in a local Miniflare environment.
+
+```bash
+npx vitest              # run all tests
+npx vitest --watch      # watch mode during development
+npx vitest --coverage   # with coverage
+```
+
+Test categories:
+- **Unit**: Physics engine (ball movement, collisions, scoring), room name generation
+- **Integration**: Durable Object WebSocket flow, D1 room/leaderboard operations, Worker routing
+- **End-to-end**: Full game lifecycle (manual via `wrangler dev`)
+
+The physics module (`physics.ts`) is pure functions with no Cloudflare dependencies, making it straightforward to unit test. DO and D1 tests use Cloudflare's Vitest pool which runs a local Miniflare instance with real bindings.
 
 ---
 
@@ -266,29 +456,17 @@ pong/
 
 ---
 
-## Deploy
+## Setup
 
 ### Prerequisites
 - Cloudflare Workers Paid plan ($5/mo) for Durable Objects, D1, and Hyperdrive
 - A Postgres instance accessible from the internet (for analytics via Hyperdrive)
 
-### Steps
-```bash
-# Create D1 database
-wrangler d1 create pong-db
-
-# Create Hyperdrive config (pointing to your Postgres)
-wrangler hyperdrive create pong-analytics \
-  --connection-string="postgres://user:pass@host:5432/pong_analytics"
-
-# Run D1 migrations
-wrangler d1 execute pong-db --file=./schema/d1-schema.sql
-
-# Run Postgres migrations
-psql $POSTGRES_CONNECTION_STRING -f ./schema/postgres-schema.sql
-
-# Deploy
-wrangler deploy
+### Credentials needed
+```
+CLOUDFLARE_API_TOKEN=<your-token>
+CLOUDFLARE_ACCOUNT_ID=<your-account-id>
+POSTGRES_CONNECTION_STRING=postgres://user:pass@host:5432/pong_analytics
 ```
 
 ---
