@@ -170,7 +170,7 @@ id = "<created-at-deploy>"
 - Upgrades HTTP to WebSocket for the game connection
 - Generates human-readable room and player names ("swift-fox", "Bold Tiger")
 - Serves the homepage with live dashboard, stats, and recent games
-- API endpoints for room creation, stats, analytics, and event logging
+- API endpoints: `/api/create`, `/api/stats`, `/api/recent`, `/api/leaderboard`, `/api/analytics`, `/api/events/live`, `/api/event`
 
 **Code shape:**
 ```typescript
@@ -225,6 +225,13 @@ This is the textbook DO use case. Each game room needs:
 
 **Game state in DO SQLite:**
 ```sql
+CREATE TABLE game_state (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
+-- Stores: ball position/velocity, paddle positions, scores, game phase
+-- Using KV pattern because game state is a single mutable blob
+
 CREATE TABLE players (
   slot INTEGER PRIMARY KEY,  -- 1 or 2
   connected_at TEXT,
@@ -233,13 +240,12 @@ CREATE TABLE players (
   country TEXT
 );
 
-CREATE TABLE game_results (
+CREATE TABLE rallies (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  winner_slot INTEGER,
-  final_score TEXT,
-  total_rallies INTEGER,
-  longest_rally INTEGER,
-  duration_seconds REAL
+  started_at TEXT,
+  ended_at TEXT,
+  hits INTEGER,
+  winner_slot INTEGER
 );
 ```
 
@@ -293,7 +299,7 @@ Server-authoritative physics means:
 **Schema:**
 ```sql
 CREATE TABLE rooms (
-  id TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY,              -- "swift-fox"
   created_at TEXT NOT NULL,
   creator_colo TEXT,
   creator_city TEXT,
@@ -304,14 +310,27 @@ CREATE TABLE rooms (
   player2_colo TEXT,
   player1_city TEXT,
   player2_city TEXT,
-  player1_name TEXT,
-  player2_name TEXT,
+  player1_name TEXT,                -- "Swift Fox" (added via migration)
+  player2_name TEXT,                -- "Bold Tiger" or "AI 🤖"
   winner_slot INTEGER,
-  final_score TEXT,
+  final_score TEXT,                 -- "5-3"
   total_rallies INTEGER,
   longest_rally INTEGER,
   game_duration_seconds REAL
 );
+
+CREATE TABLE leaderboard (
+  player_id TEXT PRIMARY KEY,
+  wins INTEGER DEFAULT 0,
+  losses INTEGER DEFAULT 0,
+  longest_rally INTEGER DEFAULT 0,
+  games_played INTEGER DEFAULT 0,
+  last_played TEXT
+);
+
+CREATE INDEX idx_rooms_status ON rooms(status);
+CREATE INDEX idx_rooms_created ON rooms(created_at DESC);
+CREATE INDEX idx_leaderboard_wins ON leaderboard(wins DESC);
 ```
 
 ### Hyperdrive + Postgres
@@ -362,6 +381,17 @@ WHERE event_type IN ('point_scored', 'game_over')
 GROUP BY room_id ORDER BY points DESC;
 ```
 
+-- Materialized view for hourly activity (deployed in Postgres)
+CREATE MATERIALIZED VIEW hourly_activity AS
+SELECT
+  date_trunc('hour', timestamp) AS hour,
+  COUNT(DISTINCT room_id) AS games,
+  COUNT(DISTINCT city) AS cities,
+  COUNT(*) FILTER (WHERE event_type = 'point_scored') AS total_points
+FROM game_events
+GROUP BY 1 ORDER BY 1 DESC;
+```
+
 **Hyperdrive cache note:** Analytics queries avoid `NOW()` in parameterized form where possible, letting Hyperdrive cache read-heavy dashboard queries. The live event feed uses `ORDER BY timestamp DESC LIMIT 20` which naturally expires from cache as new events arrive.
 
 ---
@@ -373,6 +403,7 @@ GROUP BY room_id ORDER BY points DESC;
 - Renders at 60fps, interpolating between server state updates
 - Client-side prediction for paddle movement (immediate response, no input lag)
 - Server reconciliation when authoritative state arrives
+- Touch controls for mobile (touchmove events)
 
 ### Visual style
 - Retro arcade aesthetic with Spark's warm ember palette
@@ -441,6 +472,7 @@ The physics module (`physics.ts`) is pure functions with no Cloudflare dependenc
 ```
 pong/
 ├── wrangler.toml            # Cloudflare config (Workers, DO, D1, Hyperdrive)
+├── vitest.config.ts         # Test config with Cloudflare Workers pool
 ├── tsconfig.json
 ├── package.json
 ├── src/
@@ -448,10 +480,17 @@ pong/
 │   ├── game-room.ts         # Durable Object: WebSocket, physics, AI, event logging
 │   ├── physics.ts           # Ball/paddle physics engine (pure functions)
 │   ├── room-names.ts        # Room name + player name generator
-│   └── d1-queries.ts        # D1: room creation, game results, recent games
+│   ├── d1-queries.ts        # D1: room creation, game results, recent games
+│   └── analytics.ts         # Hyperdrive: Postgres analytics query builders
+├── tests/
+│   ├── physics.test.ts      # Unit: ball movement, collisions, scoring
+│   ├── room-names.test.ts   # Unit: name generation
+│   ├── d1-queries.test.ts   # Integration: D1 room/leaderboard operations
+│   ├── worker.test.ts       # Integration: Worker routing, API endpoints
+│   └── analytics.test.ts    # Unit: query builders (no real Postgres)
 └── schema/
     ├── d1-schema.sql        # D1 rooms + leaderboard tables
-    └── postgres-schema.sql  # Postgres game_events table
+    └── postgres-schema.sql  # Postgres game_events + materialized views
 ```
 
 ---

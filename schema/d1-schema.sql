@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS rooms (
   player2_colo TEXT,
   player1_city TEXT,
   player2_city TEXT,
+  player1_name TEXT,
+  player2_name TEXT,
   winner_slot INTEGER,
   final_score TEXT,
   total_rallies INTEGER,
