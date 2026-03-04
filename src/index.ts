@@ -465,16 +465,13 @@ const GAME_HTML = `<!DOCTYPE html>
     const ctx = canvas.getContext('2d');
     const statusEl = document.getElementById('status');
     
-    // Game state + interpolation
-    let gameState = {
-      ball: { x: 0.5, y: 0.5 },
-      paddle1: 0.5,
-      paddle2: 0.5,
-      score1: 0,
-      score2: 0,
-      phase: 'waiting'
-    };
-    let prevState = { ...gameState, ball: { ...gameState.ball } };
+    // Game state + interpolation (reuse objects, no allocations per frame)
+    const ball = { x: 0.5, y: 0.5 };
+    const prevBall = { x: 0.5, y: 0.5 };
+    let paddle1 = 0.5, paddle2 = 0.5;
+    let prevPaddle1 = 0.5, prevPaddle2 = 0.5;
+    let score1 = 0, score2 = 0;
+    let phase = 'waiting';
     let stateTime = 0;
     let myRole = null;
     let mySlot = null;
@@ -522,8 +519,13 @@ const GAME_HTML = `<!DOCTYPE html>
           break;
           
         case 'state':
-          prevState = { ...gameState, ball: { ...gameState.ball } };
-          gameState = data;
+          // Mutate in place - zero allocations
+          prevBall.x = ball.x; prevBall.y = ball.y;
+          prevPaddle1 = paddle1; prevPaddle2 = paddle2;
+          ball.x = data.ball.x; ball.y = data.ball.y;
+          paddle1 = data.paddle1; paddle2 = data.paddle2;
+          score1 = data.score1; score2 = data.score2;
+          phase = data.phase;
           stateTime = performance.now();
           break;
           
@@ -600,12 +602,11 @@ const GAME_HTML = `<!DOCTYPE html>
     function render() {
       // Interpolation factor (smooth between server updates)
       const elapsed = performance.now() - stateTime;
-      const t = Math.min(elapsed / 33, 1); // 33ms = ~30fps server rate
-      const lerpBallX = prevState.ball.x + (gameState.ball.x - prevState.ball.x) * t;
-      const lerpBallY = prevState.ball.y + (gameState.ball.y - prevState.ball.y) * t;
-      // Use local paddle for own paddle (instant), server state for opponent
-      const lerpP1 = mySlot === 1 ? localPaddleY : prevState.paddle1 + (gameState.paddle1 - prevState.paddle1) * t;
-      const lerpP2 = mySlot === 2 ? localPaddleY : prevState.paddle2 + (gameState.paddle2 - prevState.paddle2) * t;
+      const t = Math.min(elapsed / 33, 1);
+      const lerpBallX = prevBall.x + (ball.x - prevBall.x) * t;
+      const lerpBallY = prevBall.y + (ball.y - prevBall.y) * t;
+      const lerpP1 = mySlot === 1 ? localPaddleY : prevPaddle1 + (paddle1 - prevPaddle1) * t;
+      const lerpP2 = mySlot === 2 ? localPaddleY : prevPaddle2 + (paddle2 - prevPaddle2) * t;
       
       // Clear
       ctx.fillStyle = '#0f0f0f';
@@ -620,15 +621,12 @@ const GAME_HTML = `<!DOCTYPE html>
       ctx.stroke();
       ctx.setLineDash([]);
       
-      // Scores (one shadow call for both)
+      // Scores (no shadow - saves GPU every frame)
       ctx.fillStyle = '#fbbf24';
       ctx.font = '48px "Courier New"';
       ctx.textAlign = 'center';
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = 'rgba(249,115,22,0.6)';
-      ctx.fillText(gameState.score1, canvas.width / 4, 60);
-      ctx.fillText(gameState.score2, (canvas.width * 3) / 4, 60);
-      ctx.shadowBlur = 0;
+      ctx.fillText(score1, canvas.width / 4, 60);
+      ctx.fillText(score2, (canvas.width * 3) / 4, 60);
       
       // Left paddle (orange, cached gradient, no shadow)
       ctx.fillStyle = grad1;
@@ -648,24 +646,27 @@ const GAME_HTML = `<!DOCTYPE html>
         paddleHeight
       );
       
-      // Ball - interpolated position
-      const ballX = lerpBallX * canvas.width;
-      const ballY = lerpBallY * canvas.height;
-      const ballRadius = canvas.width * 0.01;
+      // Ball - interpolated position, no shadow (perf)
+      const bx = lerpBallX * canvas.width;
+      const by = lerpBallY * canvas.height;
+      const br = canvas.width * 0.01;
       
-      // Ember glow (single shadow call)
-      ctx.shadowBlur = 25;
-      ctx.shadowColor = '#f97316';
-      ctx.fillStyle = '#f97316';
+      // Outer glow circle (no shadowBlur, just a larger translucent circle)
+      ctx.fillStyle = 'rgba(249,115,22,0.3)';
       ctx.beginPath();
-      ctx.arc(ballX, ballY, ballRadius, 0, Math.PI * 2);
+      ctx.arc(bx, by, br * 2.5, 0, Math.PI * 2);
       ctx.fill();
       
-      // Bright core (no extra shadow)
-      ctx.shadowBlur = 0;
+      // Main ball
+      ctx.fillStyle = '#f97316';
+      ctx.beginPath();
+      ctx.arc(bx, by, br, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Hot core
       ctx.fillStyle = '#fbbf24';
       ctx.beginPath();
-      ctx.arc(ballX, ballY, ballRadius * 0.6, 0, Math.PI * 2);
+      ctx.arc(bx, by, br * 0.5, 0, Math.PI * 2);
       ctx.fill();
       
       requestAnimationFrame(render);
