@@ -5,18 +5,17 @@
 **Stack:** Workers + Durable Objects + D1 + Hyperdrive + Postgres
 ---
 
-## Current Features
-- **Real-time multiplayer** via WebSockets + Durable Objects (authoritative server physics)
-- **AI opponent** for solo play with adjustable difficulty
-- **Client-side paddle prediction** for zero-lag input response
-- **Start Game button** - either player can start when both are connected
-- **Waiting room** - "Waiting for Player 2..." status until opponent joins
-- **Recent games feed** on homepage (persisted to D1)
-- **Global stats** - total games, active games, player count
-- **Retro Spark-themed UI** - ember glow, warm orange/gold palette, scanlines
-- **Sound effects** via Web Audio API (no external assets)
-- **Performance optimized** - zero-allocation render loop, no canvas shadowBlur, throttled network sends
-- **Built by [Spark](https://spark.jeka.org)**
+- Real-time multiplayer via WebSockets + Durable Objects (authoritative server physics)
+- AI opponent for solo play with adjustable difficulty
+- Client-side paddle prediction for zero-lag input response
+- Start Game button: either player can start when both are connected
+- Waiting room: "Waiting for Player 2..." status until opponent joins
+- Recent games feed on homepage (persisted to D1)
+- Global stats: total games, active games, player count
+- Retro Spark-themed UI: ember glow, warm orange/gold palette, scanlines
+- Sound effects via Web Audio API (no external assets)
+- Performance optimized: zero-allocation render loop, throttled network sends
+- Built by [Spark](https://spark.jeka.org)
 
 ---
 
