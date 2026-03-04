@@ -325,8 +325,7 @@ const HOME_HTML = `<!DOCTYPE html>
       margin-bottom: 1.5rem;
     }
     .dash-header h2 { font-size: 1.3rem; color: #fbbf24; }
-    .live-dot { display: inline-block; width: 8px; height: 8px; background: #22c55e; border-radius: 50%; animation: blink 1.5s infinite; }
-    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .live-dot { display: inline-block; width: 8px; height: 8px; background: #22c55e; border-radius: 50%; }
     .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
     .dash-grid-full { grid-column: 1 / -1; }
     .card {
@@ -341,7 +340,7 @@ const HOME_HTML = `<!DOCTYPE html>
     td { font-size: 0.85rem; }
     .bar-container { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; }
     .bar { height: 12px; background: linear-gradient(90deg, #f97316, #fbbf24); min-width: 2px; transition: width 0.3s; }
-    .event-feed { max-height: 300px; overflow-y: auto; }
+    .event-feed { }
     .event-item { padding: 0.4rem 0; border-bottom: 1px solid rgba(249,115,22,0.08); display: flex; align-items: center; gap: 0.6rem; animation: fadeIn 0.3s; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
     .event-icon { font-size: 1.1rem; min-width: 22px; text-align: center; }
@@ -404,6 +403,14 @@ const HOME_HTML = `<!DOCTYPE html>
         <h3>TOP CITIES</h3>
         <div id="cities" class="loading">Loading...</div>
       </div>
+      <div class="card">
+        <h3>TOP GAMES</h3>
+        <div id="topGames" class="loading">Loading...</div>
+      </div>
+      <div class="card">
+        <h3>TOTALS</h3>
+        <div id="totals" class="loading">Loading...</div>
+      </div>
     </div>
   </div>
 
@@ -444,7 +451,7 @@ const HOME_HTML = `<!DOCTYPE html>
         const data = await res.json();
         const el = document.getElementById('liveFeed');
         if (data.events && data.events.length > 0) {
-          el.innerHTML = data.events.map(renderEvent).join('');
+          el.innerHTML = data.events.slice(0, 10).map(renderEvent).join('');
         } else {
           el.innerHTML = '<span style="opacity:0.5">No events yet. Play a game!</span>';
         }
@@ -489,6 +496,25 @@ const HOME_HTML = `<!DOCTYPE html>
             data.cities.slice(0,8).map(c => '<tr><td>' + c.city + '</td><td>' + (c.country||'?') + '</td><td style="color:#f97316">' + c.games + '</td></tr>').join('') + '</table>';
         }
         citEl.classList.remove('loading');
+        
+        const topEl = document.getElementById('topGames');
+        if (data.topGames && data.topGames.length > 0) {
+          topEl.innerHTML = '<table><tr><th>Room</th><th>Points</th><th>Best Rally</th></tr>' +
+            data.topGames.slice(0,8).map(g => '<tr><td style="font-size:0.75rem">' + g.room_id + '</td><td style="color:#f97316">' + (g.points||0) + '</td><td>' + (g.longest_rally||0) + ' hits</td></tr>').join('') + '</table>';
+        } else {
+          topEl.innerHTML = '<span style="opacity:0.5">No games yet</span>';
+        }
+        topEl.classList.remove('loading');
+        
+        const totEl = document.getElementById('totals');
+        if (data.totals) {
+          totEl.innerHTML = '<div style="display:flex;gap:2rem;justify-content:center">' +
+            '<div style="text-align:center"><div style="font-size:2rem;color:#f97316">' + (data.totals.total||0) + '</div><div style="font-size:0.75rem;opacity:0.5">Events</div></div>' +
+            '<div style="text-align:center"><div style="font-size:2rem;color:#fbbf24">' + (data.totals.rooms||0) + '</div><div style="font-size:0.75rem;opacity:0.5">Rooms</div></div></div>';
+        } else {
+          totEl.innerHTML = '<span style="opacity:0.5">No data</span>';
+        }
+        totEl.classList.remove('loading');
       } catch (err) { console.error('Analytics error:', err); }
     }
     
@@ -1083,7 +1109,7 @@ const ANALYTICS_HTML = `<!DOCTYPE html>
         const data = await res.json();
         const el = document.getElementById('liveFeed');
         if (data.events && data.events.length > 0) {
-          el.innerHTML = data.events.map(renderEvent).join('');
+          el.innerHTML = data.events.slice(0, 10).map(renderEvent).join('');
         } else {
           el.innerHTML = '<span style="opacity:0.5">No events yet. Play a game to see data flow!</span>';
         }
