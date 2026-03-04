@@ -564,6 +564,10 @@ const GAME_HTML = `<!DOCTYPE html>
       statusEl.textContent = 'DISCONNECTED';
     };
     
+    // Client-side paddle prediction + throttle
+    let localPaddleY = 0.5;
+    let lastSendTime = 0;
+    
     // Mouse/touch controls
     function handleInput(e) {
       if (!mySlot) return;
@@ -572,17 +576,21 @@ const GAME_HTML = `<!DOCTYPE html>
       let clientY;
       
       if (e.touches) {
+        e.preventDefault();
         clientY = e.touches[0].clientY;
       } else {
         clientY = e.clientY;
       }
       
-      const y = (clientY - rect.top) / rect.height;
+      const y = Math.max(0.075, Math.min(0.925, (clientY - rect.top) / rect.height));
+      localPaddleY = y; // immediate local update
       
-      ws.send(JSON.stringify({
-        type: 'paddle',
-        y: Math.max(0.075, Math.min(0.925, y))
-      }));
+      // Throttle sends to ~30fps (every 33ms)
+      const now = performance.now();
+      if (now - lastSendTime > 33) {
+        ws.send(JSON.stringify({ type: 'paddle', y: y }));
+        lastSendTime = now;
+      }
     }
     
     canvas.addEventListener('mousemove', handleInput);
@@ -595,8 +603,9 @@ const GAME_HTML = `<!DOCTYPE html>
       const t = Math.min(elapsed / 33, 1); // 33ms = ~30fps server rate
       const lerpBallX = prevState.ball.x + (gameState.ball.x - prevState.ball.x) * t;
       const lerpBallY = prevState.ball.y + (gameState.ball.y - prevState.ball.y) * t;
-      const lerpP1 = prevState.paddle1 + (gameState.paddle1 - prevState.paddle1) * t;
-      const lerpP2 = prevState.paddle2 + (gameState.paddle2 - prevState.paddle2) * t;
+      // Use local paddle for own paddle (instant), server state for opponent
+      const lerpP1 = mySlot === 1 ? localPaddleY : prevState.paddle1 + (gameState.paddle1 - prevState.paddle1) * t;
+      const lerpP2 = mySlot === 2 ? localPaddleY : prevState.paddle2 + (gameState.paddle2 - prevState.paddle2) * t;
       
       // Clear
       ctx.fillStyle = '#0f0f0f';
