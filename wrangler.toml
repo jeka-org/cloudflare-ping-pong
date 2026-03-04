@@ -3,10 +3,9 @@ main = "src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Custom domain routes (update after deploy)
-# routes = [
-#   { pattern = "pong.jeka.org", custom_domain = true }
-# ]
+routes = [
+  { pattern = "pong.jeka.org", custom_domain = true }
+]
 
 [[durable_objects.bindings]]
 name = "GAME_ROOM"
@@ -20,10 +19,9 @@ new_sqlite_classes = ["GameRoom"]
 [[d1_databases]]
 binding = "DB"
 database_name = "pong-db"
-database_id = "placeholder"
+database_id = "b74dc470-d853-4d8b-8e1a-6fe2e0f57207"
 
-# Hyperdrive binding (will be updated after wrangler hyperdrive create)
 [[hyperdrive]]
 binding = "HYPERDRIVE"
-id = "placeholder"
+id = "ccb1ff52dfd043809598a5a3bbcaaca9"
 localConnectionString = "postgres://pong_user:aeqhbtOnb3GRiQPudS2tKtAt@localhost:5432/pong_analytics"

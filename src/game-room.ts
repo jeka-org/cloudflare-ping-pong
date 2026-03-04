@@ -49,6 +49,8 @@ export class GameRoom extends DurableObject {
   private tickRate = 1000 / 60; // 60fps
   private rallies: RallyStats[] = [];
   private gameStartTime: number | null = null;
+  private aiEnabled: boolean = false;
+  private aiDifficulty: number = 0.7; // 0-1, how fast AI reacts
   
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -77,6 +79,14 @@ export class GameRoom extends DurableObject {
     const upgradeHeader = request.headers.get('Upgrade');
     if (upgradeHeader !== 'websocket') {
       return new Response('Expected WebSocket upgrade', { status: 426 });
+    }
+    
+    // Check if AI opponent requested
+    const url = new URL(request.url);
+    if (url.searchParams.get('ai') === 'true') {
+      this.aiEnabled = true;
+      const diff = url.searchParams.get('difficulty');
+      if (diff) this.aiDifficulty = Math.max(0.3, Math.min(1.0, parseFloat(diff)));
     }
     
     const webSocketPair = new WebSocketPair();
@@ -123,6 +133,15 @@ export class GameRoom extends DurableObject {
     if (!player1 && player2 && playerInfo.slot === 1) {
       this.startCountdown();
     } else if (player1 && !player2 && playerInfo.slot === 2) {
+      this.startCountdown();
+    }
+    
+    // If AI mode and first player just connected, start immediately
+    if (this.aiEnabled && playerInfo.slot === 1 && !player2) {
+      this.send(server, {
+        type: 'ai_opponent',
+        difficulty: this.aiDifficulty,
+      });
       this.startCountdown();
     }
     
@@ -235,6 +254,23 @@ export class GameRoom extends DurableObject {
   
   private gameTick() {
     if (this.gameState.phase !== 'playing') return;
+    
+    // AI paddle movement (if enabled, AI is always player 2)
+    if (this.aiEnabled) {
+      const ball = this.gameState.ball;
+      const targetY = ball.y;
+      const currentY = this.gameState.paddle2;
+      const diff = targetY - currentY;
+      // AI tracks the ball with some imperfection based on difficulty
+      const speed = 0.02 * this.aiDifficulty;
+      // Add slight randomness so AI isn't perfect
+      const jitter = (Math.random() - 0.5) * 0.01 * (1 - this.aiDifficulty);
+      if (Math.abs(diff) > 0.02) {
+        this.gameState.paddle2 = Math.max(0.075, Math.min(0.925,
+          currentY + Math.sign(diff) * speed + jitter
+        ));
+      }
+    }
     
     // Update ball position
     let ball = updateBall(this.gameState.ball);

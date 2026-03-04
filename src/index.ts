@@ -126,32 +126,66 @@ const HOME_HTML = `<!DOCTYPE html>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Courier New', monospace;
-      background: #000;
-      color: #0f0;
+      background: #0a0a0a;
+      color: #f5f5f5;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       min-height: 100vh;
       padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(ellipse at center, rgba(249,115,22,0.08) 0%, transparent 60%);
+      animation: ember-pulse 6s ease-in-out infinite alternate;
+      pointer-events: none;
+      z-index: 0;
+    }
+    @keyframes ember-pulse {
+      from { opacity: 0.4; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1.05); }
     }
     h1 {
       font-size: 4rem;
-      margin-bottom: 2rem;
-      text-shadow: 0 0 20px #0f0, 0 0 40px #0f0;
-      animation: glow 2s ease-in-out infinite alternate;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #f97316, #fbbf24, #f97316);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-shadow: none;
+      animation: title-glow 3s ease-in-out infinite alternate;
+      position: relative;
+      z-index: 1;
     }
-    @keyframes glow {
-      from { text-shadow: 0 0 20px #0f0, 0 0 40px #0f0; }
-      to { text-shadow: 0 0 30px #0f0, 0 0 60px #0f0, 0 0 80px #0f0; }
+    @keyframes title-glow {
+      from { filter: drop-shadow(0 0 20px rgba(249,115,22,0.5)); }
+      to { filter: drop-shadow(0 0 40px rgba(249,115,22,0.8)) drop-shadow(0 0 60px rgba(251,191,36,0.3)); }
+    }
+    .spark-badge {
+      font-size: 0.9rem;
+      color: #f97316;
+      margin-bottom: 0.5rem;
+      opacity: 0.9;
+      position: relative;
+      z-index: 1;
     }
     .subtitle {
       font-size: 1.2rem;
       margin-bottom: 3rem;
-      opacity: 0.8;
+      opacity: 0.6;
+      position: relative;
+      z-index: 1;
     }
     .button {
-      background: #0f0;
+      background: linear-gradient(135deg, #f97316, #ea580c);
       color: #000;
       border: none;
       padding: 1rem 3rem;
@@ -159,16 +193,24 @@ const HOME_HTML = `<!DOCTYPE html>
       font-family: 'Courier New', monospace;
       font-weight: bold;
       cursor: pointer;
-      box-shadow: 0 0 20px #0f0;
+      box-shadow: 0 0 20px rgba(249,115,22,0.4);
       transition: all 0.3s;
+      position: relative;
+      z-index: 1;
     }
     .button:hover {
-      background: #00ff00;
-      box-shadow: 0 0 40px #0f0, 0 0 60px #0f0;
+      box-shadow: 0 0 40px rgba(249,115,22,0.6), 0 0 60px rgba(251,191,36,0.3);
       transform: scale(1.05);
     }
     .button:active {
       transform: scale(0.95);
+    }
+    .button-secondary {
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      box-shadow: 0 0 20px rgba(124,58,237,0.4);
+    }
+    .button-secondary:hover {
+      box-shadow: 0 0 40px rgba(124,58,237,0.6), 0 0 60px rgba(139,92,246,0.3);
     }
     .stats {
       margin-top: 3rem;
@@ -176,33 +218,38 @@ const HOME_HTML = `<!DOCTYPE html>
       gap: 3rem;
       flex-wrap: wrap;
       justify-content: center;
+      position: relative;
+      z-index: 1;
     }
     .stat {
       text-align: center;
     }
     .stat-value {
       font-size: 3rem;
-      color: #0f0;
-      text-shadow: 0 0 10px #0f0;
+      color: #f97316;
+      text-shadow: 0 0 10px rgba(249,115,22,0.5);
     }
     .stat-label {
       font-size: 1rem;
-      opacity: 0.7;
+      opacity: 0.5;
       margin-top: 0.5rem;
     }
     .recent-games {
       margin-top: 3rem;
       width: 100%;
       max-width: 800px;
+      position: relative;
+      z-index: 1;
     }
     .recent-games h2 {
       font-size: 1.5rem;
       margin-bottom: 1rem;
       text-align: center;
+      color: #fbbf24;
     }
     .game-item {
-      background: #001100;
-      border: 1px solid #0f0;
+      background: rgba(249,115,22,0.05);
+      border: 1px solid rgba(249,115,22,0.2);
       padding: 1rem;
       margin-bottom: 0.5rem;
       display: flex;
@@ -212,6 +259,7 @@ const HOME_HTML = `<!DOCTYPE html>
     .game-score {
       font-size: 1.5rem;
       font-weight: bold;
+      color: #f97316;
     }
     .loading {
       opacity: 0.5;
@@ -221,13 +269,24 @@ const HOME_HTML = `<!DOCTYPE html>
       0%, 100% { opacity: 0.5; }
       50% { opacity: 1; }
     }
+    .footer {
+      margin-top: 3rem;
+      font-size: 0.8rem;
+      opacity: 0.3;
+      position: relative;
+      z-index: 1;
+    }
+    .footer a { color: #f97316; text-decoration: none; }
+    .footer a:hover { opacity: 0.8; }
   </style>
 </head>
 <body>
-  <h1>⚡ GLOBAL PONG ⚡</h1>
-  <div class="subtitle">Real-Time Multiplayer • Cloudflare Edge</div>
+  <h1>🔥 GLOBAL PONG 🔥</h1>
+  <div class="spark-badge">✨ built by Spark</div>
+  <div class="subtitle">Real-Time Multiplayer on Cloudflare's Edge</div>
   
   <button class="button" id="createBtn">CREATE ROOM</button>
+  <button class="button button-secondary" id="aiBtn" style="margin-top: 0.5rem;">PLAY VS AI 🤖</button>
   
   <div class="stats">
     <div class="stat">
@@ -311,6 +370,24 @@ const HOME_HTML = `<!DOCTYPE html>
       }
     });
     
+    // Play vs AI
+    document.getElementById('aiBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('aiBtn');
+      btn.disabled = true;
+      btn.textContent = 'CREATING...';
+      
+      try {
+        const res = await fetch('/api/create', { method: 'POST' });
+        const data = await res.json();
+        window.location.href = data.url + '?ai=true';
+      } catch (err) {
+        console.error('Error creating room:', err);
+        alert('Error creating room. Please try again.');
+        btn.disabled = false;
+        btn.textContent = 'PLAY VS AI 🤖';
+      }
+    });
+    
     // Load data
     loadStats();
     loadRecentGames();
@@ -318,6 +395,7 @@ const HOME_HTML = `<!DOCTYPE html>
     // Refresh stats every 10 seconds
     setInterval(loadStats, 10000);
   </script>
+  <div class="footer">✨ Powered by <a href="https://jeka.org">Spark</a> • Workers + Durable Objects + D1 + Hyperdrive</div>
 </body>
 </html>`;
 
@@ -326,13 +404,13 @@ const GAME_HTML = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pong Game</title>
+  <title>🔥 Global Pong</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Courier New', monospace;
-      background: #000;
-      color: #0f0;
+      background: #0a0a0a;
+      color: #f5f5f5;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -341,9 +419,9 @@ const GAME_HTML = `<!DOCTYPE html>
       overflow: hidden;
     }
     #gameCanvas {
-      border: 2px solid #0f0;
-      box-shadow: 0 0 20px #0f0, 0 0 40px #0f0, inset 0 0 60px rgba(0, 255, 0, 0.1);
-      background: #001100;
+      border: 2px solid #f97316;
+      box-shadow: 0 0 20px rgba(249,115,22,0.4), 0 0 40px rgba(249,115,22,0.2), inset 0 0 60px rgba(249,115,22,0.05);
+      background: #0f0f0f;
       position: relative;
     }
     #status {
@@ -353,7 +431,8 @@ const GAME_HTML = `<!DOCTYPE html>
       transform: translateX(-50%);
       font-size: 2rem;
       text-align: center;
-      text-shadow: 0 0 10px #0f0;
+      color: #fbbf24;
+      text-shadow: 0 0 10px rgba(249,115,22,0.8);
       z-index: 10;
       pointer-events: none;
     }
@@ -366,7 +445,7 @@ const GAME_HTML = `<!DOCTYPE html>
       background: linear-gradient(
         to bottom,
         rgba(0, 0, 0, 0) 50%,
-        rgba(0, 0, 0, 0.25) 50%
+        rgba(0, 0, 0, 0.15) 50%
       );
       background-size: 100% 4px;
       pointer-events: none;
@@ -400,8 +479,11 @@ const GAME_HTML = `<!DOCTYPE html>
     
     // WebSocket connection
     const roomId = window.location.pathname.split('/')[2];
+    const urlParams = new URLSearchParams(window.location.search);
+    const aiMode = urlParams.get('ai') === 'true';
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(\`\${protocol}//\${window.location.host}/r/\${roomId}\`);
+    const aiQuery = aiMode ? '?ai=true' : '';
+    const ws = new WebSocket(\`\${protocol}//\${window.location.host}/r/\${roomId}\${aiQuery}\`);
     
     ws.onopen = () => {
       console.log('Connected to game room');
@@ -421,6 +503,10 @@ const GAME_HTML = `<!DOCTYPE html>
             statusEl.textContent = \`PLAYER \${mySlot}\`;
           }
           setTimeout(() => { statusEl.style.opacity = '0'; }, 2000);
+          break;
+          
+        case 'ai_opponent':
+          statusEl.textContent = 'VS AI 🤖';
           break;
           
         case 'state':
@@ -491,11 +577,11 @@ const GAME_HTML = `<!DOCTYPE html>
     // Render loop
     function render() {
       // Clear
-      ctx.fillStyle = '#001100';
+      ctx.fillStyle = '#0f0f0f';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
       // Center line
-      ctx.strokeStyle = '#0f0';
+      ctx.strokeStyle = 'rgba(249,115,22,0.3)';
       ctx.setLineDash([10, 10]);
       ctx.beginPath();
       ctx.moveTo(canvas.width / 2, 0);
@@ -504,21 +590,26 @@ const GAME_HTML = `<!DOCTYPE html>
       ctx.setLineDash([]);
       
       // Scores
-      ctx.fillStyle = '#0f0';
+      ctx.fillStyle = '#fbbf24';
       ctx.font = '48px "Courier New"';
       ctx.textAlign = 'center';
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = 'rgba(249,115,22,0.6)';
       ctx.fillText(gameState.score1, canvas.width / 4, 60);
       ctx.fillText(gameState.score2, (canvas.width * 3) / 4, 60);
+      ctx.shadowBlur = 0;
       
       // Paddles
       const paddleHeight = canvas.height * 0.15;
       const paddleWidth = canvas.width * 0.02;
       
-      ctx.fillStyle = '#0f0';
+      // Left paddle (orange)
       ctx.shadowBlur = 20;
-      ctx.shadowColor = '#0f0';
-      
-      // Left paddle
+      ctx.shadowColor = '#f97316';
+      const grad1 = ctx.createLinearGradient(0, 0, paddleWidth, 0);
+      grad1.addColorStop(0, '#f97316');
+      grad1.addColorStop(1, '#fbbf24');
+      ctx.fillStyle = grad1;
       ctx.fillRect(
         0,
         gameState.paddle1 * canvas.height - paddleHeight / 2,
@@ -526,7 +617,12 @@ const GAME_HTML = `<!DOCTYPE html>
         paddleHeight
       );
       
-      // Right paddle
+      // Right paddle (purple)
+      ctx.shadowColor = '#7c3aed';
+      const grad2 = ctx.createLinearGradient(canvas.width - paddleWidth, 0, canvas.width, 0);
+      grad2.addColorStop(0, '#8b5cf6');
+      grad2.addColorStop(1, '#7c3aed');
+      ctx.fillStyle = grad2;
       ctx.fillRect(
         canvas.width - paddleWidth,
         gameState.paddle2 * canvas.height - paddleHeight / 2,
@@ -534,16 +630,27 @@ const GAME_HTML = `<!DOCTYPE html>
         paddleHeight
       );
       
-      // Ball
+      // Ball with ember glow
+      const ballX = gameState.ball.x * canvas.width;
+      const ballY = gameState.ball.y * canvas.height;
       const ballRadius = canvas.width * 0.01;
+      
+      // Outer glow
+      ctx.shadowBlur = 30;
+      ctx.shadowColor = '#f97316';
+      const ballGrad = ctx.createRadialGradient(ballX, ballY, 0, ballX, ballY, ballRadius * 2);
+      ballGrad.addColorStop(0, '#fbbf24');
+      ballGrad.addColorStop(0.5, '#f97316');
+      ballGrad.addColorStop(1, 'rgba(220,38,38,0.3)');
+      ctx.fillStyle = ballGrad;
       ctx.beginPath();
-      ctx.arc(
-        gameState.ball.x * canvas.width,
-        gameState.ball.y * canvas.height,
-        ballRadius,
-        0,
-        Math.PI * 2
-      );
+      ctx.arc(ballX, ballY, ballRadius * 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Bright core
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(ballX, ballY, ballRadius * 0.5, 0, Math.PI * 2);
       ctx.fill();
       
       ctx.shadowBlur = 0;

@@ -403,11 +403,19 @@ ORDER BY 1 DESC;
 - Touch controls for mobile (swipe up/down)
 
 ### Visual style
-- Retro arcade aesthetic: black background, white paddles/ball, neon score
+- Retro arcade aesthetic with Spark's warm ember palette
+- Dark background (#0a0a0a), orange/gold UI elements, purple accents
+- Left paddle: orange-to-gold gradient with fire glow
+- Right paddle: violet-to-purple gradient
+- Ball: glowing ember (white core, orange body, red outer halo)
+- Scores in amber with fire shadow
 - Scanline overlay effect (CSS)
-- CRT screen curve effect (CSS border-radius trick)
+- CRT screen vibe with warm orange border glow
 - Satisfying "pock" sound on paddle hits (Web Audio API, tiny)
 - Screen shake on scoring
+- "✨ built by Spark" badge on home page
+- Ambient ember pulse background animation
+- AI opponent option with purple button
 
 ### Screens
 1. **Home** (`/`) - "Create Room" button, recent games feed, leaderboard
