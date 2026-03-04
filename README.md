@@ -88,11 +88,6 @@ psql $POSTGRES_CONNECTION_STRING -f ./schema/postgres-schema.sql
 wrangler deploy
 ```
 
-### Cloudflare account requirements
-- **Workers Paid plan** ($5/month) - required for Durable Objects, D1, and Hyperdrive
-- **`jeka.org` on Cloudflare DNS** - already set up ✓
-- That's it. $5/mo includes everything.
-
 ### wrangler.toml
 ```toml
 name = "global-pong"
