@@ -629,19 +629,16 @@ const GAME_HTML = `<!DOCTYPE html>
       pointer-events: none;
     }
     .player-names {
-      position: absolute;
-      bottom: 8px;
-      left: 0;
-      right: 0;
+      width: 800px;
       display: flex;
       justify-content: space-between;
-      padding: 0 12px;
-      font-size: 0.7rem;
-      z-index: 10;
-      pointer-events: none;
+      padding: 0.5rem 0;
+      font-size: 1.1rem;
+      font-weight: bold;
+      letter-spacing: 0.05em;
     }
-    .p1-name { color: rgba(249,115,22,0.6); }
-    .p2-name { color: rgba(139,92,246,0.6); }
+    .p1-name { color: #f97316; text-shadow: 0 0 8px rgba(249,115,22,0.4); }
+    .p2-name { color: #8b5cf6; text-shadow: 0 0 8px rgba(139,92,246,0.4); }
     .scanlines {
       position: absolute;
       top: 0;
@@ -660,12 +657,12 @@ const GAME_HTML = `<!DOCTYPE html>
   </style>
 </head>
 <body>
+  <div class="player-names"><span id="p1name" class="p1-name"></span><span id="p2name" class="p2-name"></span></div>
   <div style="position: relative;">
     <canvas id="gameCanvas" width="800" height="600"></canvas>
     <div class="scanlines"></div>
     <div id="status">CONNECTING...</div>
     <button id="startBtn">START GAME 🔥</button>
-    <div class="player-names"><span id="p1name" class="p1-name"></span><span id="p2name" class="p2-name"></span></div>
     <div id="latency"></div>
   </div>
 
