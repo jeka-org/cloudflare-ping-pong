@@ -611,10 +611,16 @@ const GAME_HTML = `<!DOCTYPE html>
       justify-content: center;
       min-height: 100vh;
       overflow: hidden;
+      touch-action: none;
+      -webkit-overflow-scrolling: none;
     }
     .game-wrap {
       position: relative;
-      padding: 40px 60px;
+      padding: 20px;
+      max-width: 100%;
+    }
+    @media (min-width: 900px) {
+      .game-wrap { padding: 40px 60px; }
     }
     /* Cloud shapes */
     .cloud {
@@ -686,6 +692,9 @@ const GAME_HTML = `<!DOCTYPE html>
       background: #0f0f0f;
       position: relative;
       z-index: 1;
+      max-width: 100%;
+      height: auto;
+      touch-action: none;
     }
     #status {
       position: absolute;
@@ -730,7 +739,8 @@ const GAME_HTML = `<!DOCTYPE html>
       pointer-events: none;
     }
     .player-names {
-      width: 800px;
+      width: 100%;
+      max-width: 800px;
       display: flex;
       justify-content: space-between;
       padding: 0.5rem 0;
@@ -742,8 +752,8 @@ const GAME_HTML = `<!DOCTYPE html>
     .p2-name { color: #8b5cf6; text-shadow: 0 0 8px rgba(139,92,246,0.4); }
     .home-link {
       position: absolute;
-      top: 20px;
-      left: 20px;
+      top: 10px;
+      left: 10px;
       font-size: 0.9rem;
       color: #f97316;
       text-decoration: none;
@@ -967,7 +977,7 @@ const GAME_HTML = `<!DOCTYPE html>
     }
     
     canvas.addEventListener('mousemove', handleInput);
-    canvas.addEventListener('touchmove', handleInput);
+    canvas.addEventListener('touchmove', handleInput, { passive: false });
     
     startBtn.addEventListener('click', () => {
       ws.send(JSON.stringify({ type: 'start_game' }));
