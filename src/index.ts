@@ -9,6 +9,7 @@ import {
   getLeaderboard,
   getGlobalStats,
 } from './d1-queries';
+import pg from 'pg';
 
 export { GameRoom };
 
@@ -80,6 +81,75 @@ export default {
       if (url.pathname === '/api/stats') {
         const stats = await getGlobalStats(env.DB);
         return Response.json({ stats }, { headers: corsHeaders });
+      }
+      
+      // API: Log analytics event to Postgres via Hyperdrive
+      if (url.pathname === '/api/event' && request.method === 'POST') {
+        try {
+          const event = await request.json() as any;
+          const client = new pg.Client(env.HYPERDRIVE.connectionString);
+          await client.connect();
+          await client.query(
+            `INSERT INTO game_events (room_id, event_type, player_slot, colo, city, country, metadata)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [event.room_id, event.event_type, event.player_slot, event.colo, event.city, event.country, JSON.stringify(event.metadata || {})]
+          );
+          await client.end();
+          return Response.json({ ok: true }, { headers: corsHeaders });
+        } catch (err: any) {
+          console.error('Analytics event error:', err);
+          return Response.json({ error: err.message }, { status: 500, headers: corsHeaders });
+        }
+      }
+      
+      // API: Analytics data from Postgres
+      if (url.pathname === '/api/analytics') {
+        try {
+          const client = new pg.Client(env.HYPERDRIVE.connectionString);
+          await client.connect();
+          
+          const [activity, cities, topGames, eventCount] = await Promise.all([
+            client.query(
+              `SELECT date_trunc('hour', timestamp) AS hour, COUNT(DISTINCT room_id) AS games, COUNT(*) AS events
+               FROM game_events WHERE timestamp > NOW() - INTERVAL '24 hours'
+               GROUP BY 1 ORDER BY 1 DESC LIMIT 24`
+            ),
+            client.query(
+              `SELECT city, country, COUNT(DISTINCT room_id) AS games, COUNT(*) AS events
+               FROM game_events WHERE city IS NOT NULL
+               GROUP BY city, country ORDER BY games DESC LIMIT 20`
+            ),
+            client.query(
+              `SELECT room_id, 
+                      COUNT(*) FILTER (WHERE event_type = 'point_scored') AS points,
+                      MAX((metadata->>'rally_hits')::int) AS longest_rally,
+                      MAX((metadata->>'duration_seconds')::int) AS duration
+               FROM game_events 
+               WHERE event_type IN ('point_scored', 'game_over')
+               GROUP BY room_id ORDER BY points DESC LIMIT 10`
+            ),
+            client.query(`SELECT COUNT(*) AS total, COUNT(DISTINCT room_id) AS rooms FROM game_events`),
+          ]);
+          
+          await client.end();
+          
+          return Response.json({
+            activity: activity.rows,
+            cities: cities.rows,
+            topGames: topGames.rows,
+            totals: eventCount.rows[0],
+          }, { headers: corsHeaders });
+        } catch (err: any) {
+          console.error('Analytics query error:', err);
+          return Response.json({ error: err.message }, { status: 500, headers: corsHeaders });
+        }
+      }
+      
+      // Analytics dashboard page
+      if (url.pathname === '/analytics') {
+        return new Response(ANALYTICS_HTML, {
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        });
       }
       
       // Route to game room (both game page and WebSocket)
@@ -757,6 +827,150 @@ const GAME_HTML = `<!DOCTYPE html>
         }
       }, 50);
     }
+  </script>
+</body>
+</html>`;
+
+const ANALYTICS_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Global Pong - Analytics</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Courier New', monospace;
+      background: #0a0a0a;
+      color: #f5f5f5;
+      padding: 2rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #f97316, #fbbf24);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .back { color: #f97316; text-decoration: none; font-size: 0.9rem; }
+    .back:hover { opacity: 0.8; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin-top: 2rem; }
+    .card {
+      background: rgba(249,115,22,0.05);
+      border: 1px solid rgba(249,115,22,0.2);
+      padding: 1.5rem;
+    }
+    .card h2 { color: #fbbf24; font-size: 1.2rem; margin-bottom: 1rem; }
+    .stat-big { font-size: 3rem; color: #f97316; }
+    .stat-label { opacity: 0.5; font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid rgba(249,115,22,0.1); }
+    th { color: #fbbf24; font-size: 0.8rem; text-transform: uppercase; }
+    td { font-size: 0.9rem; }
+    .bar-container { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem; }
+    .bar { height: 16px; background: linear-gradient(90deg, #f97316, #fbbf24); min-width: 2px; }
+    .loading { opacity: 0.5; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
+    .footer { margin-top: 3rem; font-size: 0.8rem; opacity: 0.3; }
+    .footer a { color: #f97316; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <a href="/" class="back">&larr; Back to Game</a>
+  <h1>&#x1F4CA; Analytics</h1>
+  <p style="opacity:0.5;margin-top:0.5rem">Powered by Hyperdrive + Postgres</p>
+  
+  <div class="grid">
+    <div class="card">
+      <h2>TOTALS</h2>
+      <div id="totals" class="loading">Loading...</div>
+    </div>
+    <div class="card">
+      <h2>ACTIVITY (24H)</h2>
+      <div id="activity" class="loading">Loading...</div>
+    </div>
+    <div class="card">
+      <h2>TOP CITIES</h2>
+      <div id="cities" class="loading">Loading...</div>
+    </div>
+    <div class="card">
+      <h2>TOP GAMES</h2>
+      <div id="topGames" class="loading">Loading...</div>
+    </div>
+  </div>
+  
+  <div class="footer">Built by <a href="https://spark.jeka.org">Spark</a> | Data via Hyperdrive to Postgres</div>
+
+  <script>
+    async function loadAnalytics() {
+      try {
+        const res = await fetch('/api/analytics');
+        const data = await res.json();
+        
+        if (data.error) {
+          document.querySelectorAll('.loading').forEach(el => {
+            el.innerHTML = '<span style="color:#ef4444">Error: ' + data.error + '</span>';
+            el.classList.remove('loading');
+          });
+          return;
+        }
+        
+        const t = data.totals;
+        document.getElementById('totals').innerHTML = 
+          '<div style="display:flex;gap:2rem">' +
+          '<div><div class="stat-big">' + (t.total || 0) + '</div><div class="stat-label">Events</div></div>' +
+          '<div><div class="stat-big">' + (t.rooms || 0) + '</div><div class="stat-label">Rooms</div></div>' +
+          '</div>';
+        document.getElementById('totals').classList.remove('loading');
+        
+        const actEl = document.getElementById('activity');
+        if (data.activity.length === 0) {
+          actEl.innerHTML = '<span style="opacity:0.5">No activity in last 24h</span>';
+        } else {
+          const maxGames = Math.max(...data.activity.map(a => parseInt(a.games)));
+          actEl.innerHTML = data.activity.map(a => {
+            const hour = new Date(a.hour).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const pct = Math.max(5, (parseInt(a.games) / maxGames) * 100);
+            return '<div class="bar-container"><span style="min-width:60px;font-size:0.8rem">' + hour + '</span>' +
+                   '<div class="bar" style="width:' + pct + '%"></div>' +
+                   '<span style="font-size:0.8rem;opacity:0.6">' + a.games + ' games</span></div>';
+          }).join('');
+        }
+        actEl.classList.remove('loading');
+        
+        const citEl = document.getElementById('cities');
+        if (data.cities.length === 0) {
+          citEl.innerHTML = '<span style="opacity:0.5">No city data yet</span>';
+        } else {
+          citEl.innerHTML = '<table><tr><th>City</th><th>Country</th><th>Games</th></tr>' +
+            data.cities.map(c => '<tr><td>' + c.city + '</td><td>' + (c.country || '?') + '</td><td style="color:#f97316">' + c.games + '</td></tr>').join('') +
+            '</table>';
+        }
+        citEl.classList.remove('loading');
+        
+        const tgEl = document.getElementById('topGames');
+        if (data.topGames.length === 0) {
+          tgEl.innerHTML = '<span style="opacity:0.5">No completed games yet</span>';
+        } else {
+          tgEl.innerHTML = '<table><tr><th>Room</th><th>Points</th><th>Longest Rally</th></tr>' +
+            data.topGames.map(g => '<tr><td>' + g.room_id + '</td><td style="color:#f97316">' + (g.points || 0) + '</td><td>' + (g.longest_rally || '-') + '</td></tr>').join('') +
+            '</table>';
+        }
+        tgEl.classList.remove('loading');
+        
+      } catch (err) {
+        console.error('Error loading analytics:', err);
+        document.querySelectorAll('.loading').forEach(el => {
+          el.innerHTML = '<span style="color:#ef4444">Failed to load</span>';
+          el.classList.remove('loading');
+        });
+      }
+    }
+    
+    loadAnalytics();
+    setInterval(loadAnalytics, 30000);
   </script>
 </body>
 </html>`;

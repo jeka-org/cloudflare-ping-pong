@@ -158,6 +158,9 @@ export class GameRoom extends DurableObject {
     // Save player connection to SQLite
     await this.savePlayerConnection(playerInfo);
     
+    // Log analytics
+    this.logEvent('player_joined', playerInfo.slot, playerInfo);
+    
     // Broadcast current state
     this.broadcastState();
     
@@ -343,6 +346,13 @@ export class GameRoom extends DurableObject {
         rallyHits: this.gameState.rallyHits,
       });
       
+      // Log to analytics
+      this.logEvent('point_scored', scoreCheck.scorer, null, {
+        score1: this.gameState.score1,
+        score2: this.gameState.score2,
+        rally_hits: this.gameState.rallyHits,
+      });
+      
       // Check for game over (first to 5)
       if (this.gameState.score1 >= 5 || this.gameState.score2 >= 5) {
         this.gameState.phase = 'finished';
@@ -356,8 +366,14 @@ export class GameRoom extends DurableObject {
           rallies: this.rallies,
         });
         
-        // Save results
+        // Save results + analytics
         this.ctx.waitUntil(this.saveGameResults());
+        this.logEvent('game_over', this.gameState.score1 >= 5 ? 1 : 2, null, {
+          score1: this.gameState.score1,
+          score2: this.gameState.score2,
+          rallies: this.rallies.length,
+          duration_seconds: this.gameStartTime ? Math.round((Date.now() - this.gameStartTime) / 1000) : 0,
+        });
         return;
       }
       
@@ -560,6 +576,27 @@ export class GameRoom extends DurableObject {
     } catch (err) {
       console.error('Error saving game results:', err);
     }
+  }
+  
+  // Fire-and-forget analytics event to Postgres via main Worker
+  private logEvent(eventType: string, playerSlot: number | null, playerInfo: PlayerInfo | null, metadata: Record<string, any> = {}) {
+    const body = JSON.stringify({
+      room_id: this.roomId,
+      event_type: eventType,
+      player_slot: playerSlot,
+      colo: playerInfo?.colo || null,
+      city: playerInfo?.city || null,
+      country: playerInfo?.country || null,
+      metadata,
+    });
+    // Use waitUntil so it doesn't block game logic
+    this.ctx.waitUntil(
+      fetch('https://pong.jeka.org/api/event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Internal': 'true' },
+        body,
+      }).catch(err => console.error('Analytics event error:', err))
+    );
   }
 }
 
