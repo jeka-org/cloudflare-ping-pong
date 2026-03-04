@@ -126,7 +126,7 @@ export default {
                       MAX((metadata->>'duration_seconds')::int) AS duration
                FROM game_events 
                WHERE event_type IN ('point_scored', 'game_over')
-               GROUP BY room_id ORDER BY points DESC LIMIT 10`
+               GROUP BY room_id ORDER BY longest_rally DESC NULLS LAST LIMIT 10`
             ),
             client.query(`SELECT COUNT(*) AS total, COUNT(DISTINCT room_id) AS rooms FROM game_events`),
           ]);
@@ -500,8 +500,8 @@ const HOME_HTML = `<!DOCTYPE html>
         
         const topEl = document.getElementById('topGames');
         if (data.topGames && data.topGames.length > 0) {
-          setHTML(topEl, '<table><tr><th>Room</th><th>Points</th><th>Best Rally</th></tr>' +
-            data.topGames.slice(0,8).map(g => '<tr><td style="font-size:0.75rem">' + g.room_id + '</td><td style="color:#f97316">' + (g.points||0) + '</td><td>' + (g.longest_rally||0) + ' hits</td></tr>').join('') + '</table>');
+          setHTML(topEl, '<table><tr><th>Room</th><th>Best Rally</th><th>Points</th></tr>' +
+            data.topGames.slice(0,8).map(g => '<tr><td style="font-size:0.75rem">' + g.room_id + '</td><td style="color:#f97316">' + (g.longest_rally||0) + ' hits</td><td>' + (g.points||0) + '</td></tr>').join('') + '</table>');
         } else {
           setHTML(topEl, '<span style="opacity:0.5">No games yet</span>');
         }
