@@ -448,6 +448,191 @@ All dashboard data uses `setHTML()` diffing to avoid visual flicker on refresh c
 
 ---
 
+## Game Lobby & Spectator System
+
+### Overview
+
+The homepage shows a live list of active game rooms so visitors can jump into a waiting game or spectate one in progress. No more guessing if anyone's playing.
+
+### The Problem
+
+Durable Objects have no "list all instances" API. Each DO is isolated, so you can't ask Cloudflare "give me all active GameRoom DOs."
+
+### Solution: Lobby DO
+
+A dedicated **Lobby DO** acts as a central registry. Game rooms register/unregister themselves with it on state changes.
+
+```
+                    Homepage
+                       │
+              GET /api/lobby or WS /ws/lobby
+                       │
+                 ┌─────▼──────┐
+                 │  Lobby DO   │  ← Single instance, knows all active rooms
+                 │  (registry) │
+                 └─────┬──────┘
+                       │ rooms register/unregister via RPC
+          ┌────────────┼────────────┐
+     ┌────▼────┐  ┌────▼────┐  ┌───▼─────┐
+     │ Room A  │  │ Room B  │  │ Room C  │
+     │ WAITING │  │ PLAYING │  │ PLAYING │
+     └─────────┘  └─────────┘  └─────────┘
+```
+
+### Lobby DO Design
+
+Maintains an in-memory map of active rooms, backed by co-located SQLite for persistence across hibernation. Pushes updates to all connected homepage viewers via WebSocket.
+
+```typescript
+interface RoomInfo {
+  roomId: string;
+  status: 'waiting' | 'playing' | 'finished';
+  player1Name: string;
+  player2Name: string | null;
+  player1Colo: string;
+  player2Colo: string | null;
+  score: [number, number];
+  spectatorCount: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+class LobbyRoom extends DurableObject {
+  rooms: Map<string, RoomInfo>;
+  viewers: Set<WebSocket>;  // homepage lobby subscribers
+
+  // Called by GameRoom DOs via Service Binding RPC
+  async registerRoom(info: RoomInfo): Promise<void>;
+  async unregisterRoom(roomId: string): Promise<void>;
+  async updateRoom(roomId: string, patch: Partial<RoomInfo>): Promise<void>;
+
+  // WebSocket for live lobby on homepage
+  async webSocketMessage(ws: WebSocket, msg: string) {
+    if (msg === 'subscribe') {
+      this.viewers.add(ws);
+      ws.send(JSON.stringify({ type: 'lobby_state', rooms: [...this.rooms.values()] }));
+    }
+  }
+
+  broadcastLobbyUpdate() {
+    const payload = JSON.stringify({ type: 'lobby_update', rooms: [...this.rooms.values()] });
+    for (const ws of this.viewers) ws.send(payload);
+  }
+}
+```
+
+**Staleness protection:** Lobby DO runs an alarm every 60s to prune rooms that haven't updated in 5 minutes (covers GameRoom crashes without explicit unregister). GameRooms send a heartbeat every 30s while active.
+
+**Lobby SQLite schema:**
+```sql
+CREATE TABLE lobby_rooms (
+  room_id TEXT PRIMARY KEY,
+  data TEXT NOT NULL,       -- JSON blob of RoomInfo
+  updated_at INTEGER NOT NULL
+);
+```
+
+### GameRoom → Lobby Communication
+
+Each GameRoom gets a `LOBBY` binding and notifies it on state transitions:
+
+| Event | Lobby Call |
+|-------|-----------|
+| First player joins | `registerRoom({ status: 'waiting', player1Name, ... })` |
+| Second player joins | `updateRoom(roomId, { status: 'playing', player2Name, ... })` |
+| Point scored | `updateRoom(roomId, { score: [s1, s2] })` |
+| Spectator joins/leaves | `updateRoom(roomId, { spectatorCount })` |
+| Game over / room empty | `unregisterRoom(roomId)` |
+
+### Spectator Mode
+
+Currently, a third connection gets a "spectator" role. Full spec:
+
+1. Player connects to `/r/swift-fox`, room is full → DO assigns role `spectator`
+2. Spectator receives all `state` broadcasts (ball, paddles, scores) but DO ignores any `paddle` messages from them
+3. Same game canvas renders, but paddle input is disabled
+4. "SPECTATING" badge shown in top corner
+5. Spectators can send emoji reactions (🔥 👏 😱) that briefly flash on screen for all viewers
+6. Spectator count shown to everyone
+
+```typescript
+// In GameRoom DO:
+async webSocketMessage(ws: WebSocket, msg: string) {
+  const data = JSON.parse(msg);
+  const conn = this.connections.get(ws);
+
+  if (conn.role === 'spectator') {
+    if (data.type === 'reaction') {
+      this.broadcastToAll({ type: 'reaction', emoji: data.emoji, from: conn.name });
+    }
+    return; // ignore paddle input
+  }
+  // ... normal player handling ...
+}
+```
+
+### Lobby UI on Homepage
+
+New section below the dashboard:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  🏓 ACTIVE GAMES                              Live ●   │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  🟡 WAITING FOR PLAYER                                  │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │  swift-fox     Bold Tiger (SFO)  waiting...       │  │
+│  │                                        [JOIN]     │  │
+│  └───────────────────────────────────────────────────┘  │
+│                                                         │
+│  🟢 IN PROGRESS                                         │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │  red-panda   Quick Lynx (GRU) vs Calm Bear (LAX)  │  │
+│  │              Score: 3 - 2    👁 2 watching          │  │
+│  │                                     [SPECTATE]    │  │
+│  ├───────────────────────────────────────────────────┤  │
+│  │  bold-tiger  Shy Wolf (NRT) vs Fast Deer (FRA)    │  │
+│  │              Score: 1 - 0                          │  │
+│  │                                     [SPECTATE]    │  │
+│  └───────────────────────────────────────────────────┘  │
+│                                                         │
+│  No games? [CREATE ROOM] and share the link!            │
+└─────────────────────────────────────────────────────────┘
+```
+
+- Homepage opens a WebSocket to the Lobby DO (`/ws/lobby`)
+- Lobby pushes the current room list immediately, then pushes diffs on every change
+- JOIN navigates to `/r/<roomId>` (player slot), SPECTATE does the same (room auto-assigns spectator role)
+- Updates render with `setHTML()` diffing (no flicker, same pattern as existing dashboard)
+
+### API Additions
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/lobby` | JSON list of active rooms (non-WebSocket fallback) |
+| `WS /ws/lobby` | Live lobby updates via WebSocket |
+
+### wrangler.toml additions
+
+```toml
+[[durable_objects.bindings]]
+name = "LOBBY"
+class_name = "LobbyRoom"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["LobbyRoom"]
+```
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `src/lobby-room.ts` | Lobby DO: room registry, WebSocket broadcast, staleness pruning |
+
+---
+
 ## Testing
 
 Testing uses **Vitest** with `@cloudflare/vitest-pool-workers` for testing Workers, D1, and Durable Objects in a local Miniflare environment.
@@ -478,6 +663,7 @@ pong/
 ├── src/
 │   ├── index.ts             # Worker: routes, API endpoints, homepage + game HTML (inline)
 │   ├── game-room.ts         # Durable Object: WebSocket, physics, AI, event logging
+│   ├── lobby-room.ts        # Durable Object: room registry for live lobby + spectator counts
 │   ├── physics.ts           # Ball/paddle physics engine (pure functions)
 │   ├── room-names.ts        # Room name + player name generator
 │   ├── d1-queries.ts        # D1: room creation, game results, recent games
