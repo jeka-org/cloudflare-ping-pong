@@ -9,7 +9,7 @@ import {
   checkPaddleCollision,
   checkScore,
   resetBall,
-  createPaddle,
+
   MAX_BALL_SPEED,
   BALL_RADIUS,
 } from './physics';
@@ -929,8 +929,12 @@ export class GameRoom extends DurableObject<Env> {
       const speedMultiplier = 1 + rallyHeat * 0.1;
       const currentSpeed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
       const maxForHeat = MAX_BALL_SPEED * speedMultiplier;
-      // Only boost if not already above the heat cap
-      // (don't slow the ball if gravity well pushed it above cap; that's handled by absolute clamp)
+      // Boost ball speed to heat cap if below it
+      if (currentSpeed > 0 && currentSpeed < maxForHeat) {
+        const boost = maxForHeat / currentSpeed;
+        ball.vx *= boost;
+        ball.vy *= boost;
+      }
     }
     
     // ABSOLUTE speed clamp after ALL modifiers

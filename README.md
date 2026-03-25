@@ -89,26 +89,42 @@ If a player disconnects (browser refresh, network hiccup, mobile tab switch):
 - **Client-side prediction**: Your paddle renders instantly, server reconciles
 - **Ball acceleration**: Ball speeds up after each paddle hit
 - **Angle control**: Hit position on paddle determines bounce angle
+- **Space Events** (random mid-game disruptions):
+  - **Gravity Well**: Swirling vortex pulls the ball toward it. Spawns at random positions, lasts 5 seconds.
+  - **Asteroid**: Drifting solid obstacle. Ball bounces off it, creating unpredictable angles.
+  - **Rally Heat**: After 4+ consecutive hits, ball speeds up (1.1x/1.2x/1.3x) and visuals intensify (warm vignette, enhanced trails). Resets on point scored.
+  - Events spawn ~every 20 seconds (15% chance per 3s check), max 1 active at a time
+  - Events freeze during reconnection pause, persist across rounds
 
 ### Visual Effects
-- Retro arcade aesthetic with warm ember palette (orange/gold/purple)
+- Space theme with warm ember palette (orange/gold, magenta accents)
+- **Warp starfield**: 150 stars flying outward from center with warm gold/orange streaks
 - **Ball trail**: Ember particles drift upward behind the ball
-- **Paddle hit sparks**: Burst of colored particles on collision (orange for left paddle, purple for right)
+- **Paddle hit sparks**: Burst of colored particles on collision (orange for left, magenta for right)
+- **Paddle glow pulse**: Paddles breathe with animated glow, flash white on hit
 - **Screen shake**: On scoring
-- CRT scanline overlay, cloud atmosphere, rising ember particles around canvas
+- **Rally heat visuals**: Progressive warm vignette overlay at 4/7/10+ hit rallies
+- **Gravity well**: Swirling orange particles orbiting a radial glow
+- **Asteroid**: Dark rock with orange-lit edges, slow rotation
+- Warm ember center line force field with drifting particles
+- CRT scanline overlay, nebula glow behind canvas
 - Smooth interpolation between server state updates
 
 ### Audio
-- **Background music**: 3 royalty-free chiptune tracks (random per game), crossfade looping
-  - "Arcade Puzzler" (48s), "It's Raining Pixels" (24s), "It's Always Sunny in the 80s" (32s)
+- **Background music**: 6 royalty-free chiptune tracks (random per game), crossfade looping
+  - 8-Bit Perplexion (1:50), Bonkers for Arcades (1:08), Funky Chiptune (1:15), Arcade Heroes (0:39), 8-Bit Drama (0:49), The Ice Cream Man (0:48)
   - Music by Eric Matyas (soundimage.org), embedded as base64
   - Mute toggle button in top-right corner
+  - Music fades out over 2 seconds on game end (no abrupt stop)
+  - Mobile volume reduced (0.03 vs 0.08 desktop)
 - **Sound effects** (Web Audio API, all sine wave):
   - Soft thud on paddle hit
   - Gentle chime on scoring
   - Rising three-note on game start
   - Countdown tick
   - Deep tone on game over
+- **Mobile audio**: Tap-to-start overlay unlocks AudioContext on iOS Safari. Silent buffer trick for permanent unlock.
+- **Haptic feedback**: Vibrate on paddle hits (15ms), scoring (30ms), game over (pattern)
 
 ### Spectator Mode
 - 3rd+ connections to a room become spectators
@@ -126,6 +142,14 @@ If a player disconnects (browser refresh, network hiccup, mobile tab switch):
 - Rooms animate in/out with fade transitions
 - GameRooms send heartbeat to Lobby DO every 30s to prevent stale listings
 - Lobby DO prunes rooms inactive for 5+ minutes
+
+### Mobile Support
+- **Orientation detection**: Portrait mode shows "Rotate your phone" overlay (dismissible)
+- **Responsive canvas**: Fills available width/height, 4:3 ratio, max 800px
+- **Touch zones**: Left half of screen = Player 1 paddle, right half = Player 2. Touch anywhere on your side.
+- **Multi-touch**: Can tap music/emoji buttons while holding paddle
+- **Performance**: Reduced particles on mobile (4 hit sparks vs 8, 15 stars vs 30)
+- **Landscape CSS**: Player names hidden, UI elements minimized to maximize game area
 
 ### Room Lifecycle
 - Rooms checked against D1 before serving game page (non-existent rooms get error page)

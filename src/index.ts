@@ -108,41 +108,44 @@ export default {
       
       // API: Log analytics event to Postgres via Hyperdrive
       if (url.pathname === '/api/event' && request.method === 'POST') {
+        let client;
         try {
           const event = await request.json() as any;
-          const client = new pg.Client(env.HYPERDRIVE.connectionString);
+          client = new pg.Client(env.HYPERDRIVE.connectionString);
           await client.connect();
           await client.query(
             `INSERT INTO game_events (room_id, event_type, player_slot, colo, city, country, latitude, longitude, metadata)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
             [event.room_id, event.event_type, event.player_slot, event.colo, event.city, event.country, event.latitude, event.longitude, JSON.stringify(event.metadata || {})]
           );
-          await client.end();
           return Response.json({ ok: true }, { headers: corsHeaders });
         } catch (err: any) {
           console.error('Analytics event error:', err);
           return Response.json({ error: err.message }, { status: 500, headers: corsHeaders });
+        } finally {
+          if (client) await client.end().catch(() => {});
         }
       }
       
       // API: Analytics data from Postgres
       if (url.pathname === '/api/analytics') {
+        let client2;
         try {
-          const client = new pg.Client(env.HYPERDRIVE.connectionString);
-          await client.connect();
+          client2 = new pg.Client(env.HYPERDRIVE.connectionString);
+          await client2.connect();
           
           const [activity, cities, topGames, eventCount] = await Promise.all([
-            client.query(
+            client2.query(
               `SELECT date_trunc('hour', timestamp) AS hour, COUNT(DISTINCT room_id) AS games, COUNT(*) AS events
                FROM game_events WHERE timestamp > NOW() - INTERVAL '24 hours'
                GROUP BY 1 ORDER BY 1 DESC LIMIT 24`
             ),
-            client.query(
+            client2.query(
               `SELECT city, country, COUNT(DISTINCT room_id) AS games, COUNT(*) AS events
                FROM game_events WHERE city IS NOT NULL
                GROUP BY city, country ORDER BY games DESC LIMIT 20`
             ),
-            client.query(
+            client2.query(
               `SELECT room_id, 
                       COUNT(*) FILTER (WHERE event_type = 'point_scored') AS points,
                       MAX((metadata->>'rally_hits')::int) AS longest_rally,
@@ -151,10 +154,10 @@ export default {
                WHERE event_type IN ('point_scored', 'game_over')
                GROUP BY room_id ORDER BY longest_rally DESC NULLS LAST LIMIT 10`
             ),
-            client.query(`SELECT COUNT(*) AS total, COUNT(DISTINCT room_id) AS rooms FROM game_events`),
+            client2.query(`SELECT COUNT(*) AS total, COUNT(DISTINCT room_id) AS rooms FROM game_events`),
           ]);
           
-          await client.end();
+          // client closed in finally
           
           return Response.json({
             activity: activity.rows,
@@ -171,13 +174,13 @@ export default {
       // API: Recent live events
       if (url.pathname === '/api/events/live') {
         try {
-          const client = new pg.Client(env.HYPERDRIVE.connectionString);
-          await client.connect();
-          const result = await client.query(
+          const client3 = new pg.Client(env.HYPERDRIVE.connectionString);
+          await client3.connect();
+          const result = await client3.query(
             `SELECT room_id, event_type, player_slot, colo, city, country, metadata, timestamp
              FROM game_events ORDER BY timestamp DESC LIMIT 20`
           );
-          await client.end();
+          await client3.end();
           return Response.json({ events: result.rows }, { headers: corsHeaders });
         } catch (err: any) {
           return Response.json({ error: err.message }, { status: 500, headers: corsHeaders });
@@ -1772,7 +1775,13 @@ const GAME_HTML = `<!DOCTYPE html>
         case 'room_closed':
           // Fix 5: Room is closed, show error and link
           statusEl.style.opacity = '1';
-          statusEl.innerHTML = data.reason + '<br><a href="/" style="color:#f97316;font-size:1rem">Back to Lobby</a>';
+          statusEl.textContent = data.reason || 'Room closed';
+          const backLink = document.createElement('a');
+          backLink.href = '/';
+          backLink.style.cssText = 'color:#f97316;font-size:1rem;display:block;margin-top:0.5rem';
+          backLink.textContent = 'Back to Lobby';
+          statusEl.appendChild(document.createElement('br'));
+          statusEl.appendChild(backLink);
           gameActive = false;
           break;
       }
@@ -1838,7 +1847,14 @@ const GAME_HTML = `<!DOCTYPE html>
       // Random horizontal offset
       const offset = (Math.random() - 0.5) * 200;
       el.style.left = 'calc(50% + ' + offset + 'px)';
-      el.innerHTML = '<span style="font-size:2rem">' + emoji + '</span><span class="emoji-name">' + (from || '') + '</span>';
+      const emojiSpan = document.createElement('span');
+      emojiSpan.style.fontSize = '2rem';
+      emojiSpan.textContent = emoji;
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'emoji-name';
+      nameSpan.textContent = from || '';
+      el.appendChild(emojiSpan);
+      el.appendChild(nameSpan);
       
       const canvasWrap = canvas.parentElement;
       canvasWrap.appendChild(el);
