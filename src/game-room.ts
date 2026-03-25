@@ -566,7 +566,7 @@ export class GameRoom extends DurableObject<Env> {
     
     if (reason === 'completed') {
       // Fix 1: First to 5
-      const winnerSlot = this.gameState.score1 >= 5 ? 1 : 2;
+      const winnerSlot = this.gameState.score1 >= 3 ? 1 : 2;
       
       this.broadcast({
         type: 'game_over',
@@ -777,7 +777,7 @@ export class GameRoom extends DurableObject<Env> {
       });
       
       // Fix 1: First to 5 points
-      if (this.gameState.score1 >= 5 || this.gameState.score2 >= 5) {
+      if (this.gameState.score1 >= 3 || this.gameState.score2 >= 3) {
         this.ctx.waitUntil(this.endGame('completed'));
         return;
       }

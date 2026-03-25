@@ -115,7 +115,7 @@ id = "<created-at-deploy>"
 5. Status shows "Waiting for Player 2..." until opponent joins
 6. Both players see "READY!" and a START GAME button appears
 7. Either player clicks START → 3-2-1 countdown → pong
-8. First to 5 points wins
+8. Best of 5 (first to 3 wins)
 
 ### Play vs AI
 1. Visit `pong.jeka.org`
@@ -313,7 +313,7 @@ CREATE TABLE rooms (
   player1_name TEXT,                -- "Swift Fox" (added via migration)
   player2_name TEXT,                -- "Bold Tiger" or "AI 🤖"
   winner_slot INTEGER,
-  final_score TEXT,                 -- "5-3"
+  final_score TEXT,                 -- "3-2"
   total_rallies INTEGER,
   longest_rally INTEGER,
   game_duration_seconds REAL
