@@ -1402,24 +1402,18 @@ const GAME_HTML = `<!DOCTYPE html>
           break;
           
         case 'game_over':
-          statusEl.style.opacity = '1';
           hidePauseOverlay();
-          if (data.reason === 'opponent_disconnected') {
-            statusEl.textContent = \`PLAYER \${data.winner} WINS! (Opponent disconnected)\`;
-          } else {
-            statusEl.textContent = \`PLAYER \${data.winner} WINS!\`;
-          }
           playSound('gameover');
           stopMusic();
           gameActive = false;
+          showGameOverScreen(data);
           break;
           
         case 'game_ended':
-          statusEl.style.opacity = '1';
           hidePauseOverlay();
-          statusEl.textContent = 'GAME ENDED';
           stopMusic();
           gameActive = false;
+          showGameOverScreen({ abandoned: true });
           break;
           
         case 'pong':
@@ -1867,6 +1861,44 @@ const GAME_HTML = `<!DOCTYPE html>
     musicBtn.addEventListener('mouseenter', () => { musicBtn.style.background = 'rgba(249,115,22,0.3)'; });
     musicBtn.addEventListener('mouseleave', () => { musicBtn.style.background = 'rgba(249,115,22,0.15)'; });
     canvas.parentElement.appendChild(musicBtn);
+    
+    // Game over screen
+    function showGameOverScreen(data) {
+      statusEl.style.opacity = '0';
+      
+      // Create overlay
+      const overlay = document.createElement('div');
+      overlay.id = 'gameOverOverlay';
+      overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(10,10,10,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;animation:fadeIn 0.5s;';
+      
+      if (data.abandoned) {
+        overlay.innerHTML = '<div style="font-size:1.5rem;color:#fbbf24;margin-bottom:1rem">GAME ENDED</div>' +
+          '<div style="opacity:0.5;margin-bottom:2rem">No contest</div>';
+      } else {
+        const iWon = (mySlot === data.winner);
+        const winnerName = data.winner === 1 ? player1Name : player2Name;
+        const resultColor = iWon ? '#22c55e' : '#ef4444';
+        const resultText = iWon ? 'YOU WIN!' : 'YOU LOSE';
+        const resultEmoji = iWon ? '🏆' : '💀';
+        
+        overlay.innerHTML = '<div style="font-size:3rem;margin-bottom:0.5rem">' + resultEmoji + '</div>' +
+          '<div style="font-size:2.5rem;font-weight:bold;color:' + resultColor + ';margin-bottom:0.5rem;text-shadow:0 0 20px ' + resultColor + '50">' + resultText + '</div>' +
+          '<div style="font-size:1.2rem;color:#fbbf24;margin-bottom:1.5rem">' + winnerName + ' wins</div>' +
+          '<div style="font-size:3rem;font-weight:bold;color:#f5f5f5;margin-bottom:0.3rem">' + (data.score1 || 0) + ' - ' + (data.score2 || 0) + '</div>' +
+          '<div style="display:flex;gap:3rem;margin-bottom:2rem;opacity:0.5;font-size:0.9rem">' +
+            '<span>' + player1Name + '</span><span>' + player2Name + '</span>' +
+          '</div>' +
+          (data.reason === 'opponent_disconnected' ? '<div style="opacity:0.4;font-size:0.8rem;margin-bottom:1rem">Opponent disconnected</div>' : '');
+      }
+      
+      // Action buttons
+      overlay.innerHTML += '<div style="display:flex;gap:1rem;margin-top:1rem">' +
+        '<button onclick="window.location.href=\\'/\\'" style="background:linear-gradient(135deg,#f97316,#ea580c);color:#000;border:none;padding:0.8rem 2rem;font-size:1.1rem;font-family:Courier New,monospace;font-weight:bold;cursor:pointer;box-shadow:0 0 15px rgba(249,115,22,0.4)">LOBBY</button>' +
+        '<button onclick="window.location.reload()" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;padding:0.8rem 2rem;font-size:1.1rem;font-family:Courier New,monospace;font-weight:bold;cursor:pointer;box-shadow:0 0 15px rgba(124,58,237,0.4)">PLAY AGAIN</button>' +
+      '</div>';
+      
+      canvas.parentElement.appendChild(overlay);
+    }
     
     let activeShake = null;
     function shakeScreen() {
