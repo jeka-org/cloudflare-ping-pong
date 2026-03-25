@@ -8,7 +8,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check": "vitest run && node tests/check-html-js.mjs",
+    "predeploy": "npm run check"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.5.0",

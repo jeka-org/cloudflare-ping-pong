@@ -4,7 +4,7 @@ import { SELF, env } from 'cloudflare:test';
 describe('Worker routes', () => {
   beforeEach(async () => {
     // Create tables if they don't exist
-    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS rooms (id TEXT PRIMARY KEY, created_at TEXT NOT NULL, creator_colo TEXT, creator_city TEXT, creator_country TEXT, status TEXT DEFAULT 'waiting', finished_at TEXT, player1_colo TEXT, player2_colo TEXT, player1_city TEXT, player2_city TEXT, winner_slot INTEGER, final_score TEXT, total_rallies INTEGER, longest_rally INTEGER, game_duration_seconds REAL)`).run();
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS rooms (id TEXT PRIMARY KEY, created_at TEXT NOT NULL, creator_colo TEXT, creator_city TEXT, creator_country TEXT, status TEXT DEFAULT 'waiting', finished_at TEXT, player1_colo TEXT, player2_colo TEXT, player1_city TEXT, player2_city TEXT, player1_name TEXT, player2_name TEXT, winner_slot INTEGER, final_score TEXT, total_rallies INTEGER, longest_rally INTEGER, game_duration_seconds REAL)`).run();
     
     await env.DB.prepare(`CREATE TABLE IF NOT EXISTS leaderboard (player_id TEXT PRIMARY KEY, wins INTEGER DEFAULT 0, losses INTEGER DEFAULT 0, longest_rally INTEGER DEFAULT 0, games_played INTEGER DEFAULT 0, last_played TEXT)`).run();
     
@@ -24,7 +24,7 @@ describe('Worker routes', () => {
     const resp = await SELF.fetch('http://localhost/api/create', { method: 'POST' });
     expect(resp.status).toBe(200);
     const data = (await resp.json()) as { roomId: string; url: string };
-    expect(data.roomId).toMatch(/^[a-z]+-[a-z]+$/);
+    expect(data.roomId).toMatch(/^[a-z]+-[a-z]+-[a-z0-9]+$/);
     expect(data.url).toContain('/r/');
   });
 
@@ -67,5 +67,33 @@ describe('Worker routes', () => {
   it('returns 404 for unknown routes', async () => {
     const resp = await SELF.fetch('http://localhost/nonexistent');
     expect(resp.status).toBe(404);
+  });
+
+  it('returns lobby rooms via /api/lobby', async () => {
+    const resp = await SELF.fetch('http://localhost/api/lobby');
+    expect(resp.status).toBe(200);
+    const data = (await resp.json()) as { rooms: any[] };
+    expect(data).toHaveProperty('rooms');
+    expect(Array.isArray(data.rooms)).toBe(true);
+  });
+
+  it('homepage contains ACTIVE GAMES section', async () => {
+    const resp = await SELF.fetch('http://localhost/');
+    const text = await resp.text();
+    expect(text).toContain('ACTIVE GAMES');
+    expect(text).toContain('lobbyRooms');
+    expect(text).toContain('connectLobby');
+  });
+
+  it('homepage contains spectator-related UI elements', async () => {
+    const resp = await SELF.fetch('http://localhost/');
+    const text = await resp.text();
+    expect(text).toContain('SPECTATE');
+  });
+
+  it('game page contains spectator badge reference', async () => {
+    const resp = await SELF.fetch('http://localhost/r/test-room');
+    const text = await resp.text();
+    expect(text).toContain('spectator');
   });
 });

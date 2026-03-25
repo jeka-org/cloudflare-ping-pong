@@ -11,9 +11,17 @@ routes = [
 name = "GAME_ROOM"
 class_name = "GameRoom"
 
+[[durable_objects.bindings]]
+name = "LOBBY"
+class_name = "LobbyRoom"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["GameRoom"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["LobbyRoom"]
 
 # D1 database binding (will be updated after wrangler d1 create)
 [[d1_databases]]

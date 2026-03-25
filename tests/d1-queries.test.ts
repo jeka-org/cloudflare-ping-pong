@@ -14,7 +14,7 @@ import {
 describe('D1 room operations', () => {
   beforeEach(async () => {
     // Create tables if they don't exist
-    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS rooms (id TEXT PRIMARY KEY, created_at TEXT NOT NULL, creator_colo TEXT, creator_city TEXT, creator_country TEXT, status TEXT DEFAULT 'waiting', finished_at TEXT, player1_colo TEXT, player2_colo TEXT, player1_city TEXT, player2_city TEXT, winner_slot INTEGER, final_score TEXT, total_rallies INTEGER, longest_rally INTEGER, game_duration_seconds REAL)`).run();
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS rooms (id TEXT PRIMARY KEY, created_at TEXT NOT NULL, creator_colo TEXT, creator_city TEXT, creator_country TEXT, status TEXT DEFAULT 'waiting', finished_at TEXT, player1_colo TEXT, player2_colo TEXT, player1_city TEXT, player2_city TEXT, player1_name TEXT, player2_name TEXT, winner_slot INTEGER, final_score TEXT, total_rallies INTEGER, longest_rally INTEGER, game_duration_seconds REAL)`).run();
     
     await env.DB.prepare(`CREATE TABLE IF NOT EXISTS leaderboard (player_id TEXT PRIMARY KEY, wins INTEGER DEFAULT 0, losses INTEGER DEFAULT 0, longest_rally INTEGER DEFAULT 0, games_played INTEGER DEFAULT 0, last_played TEXT)`).run();
     
@@ -34,7 +34,7 @@ describe('D1 room operations', () => {
 
   it('updates room status to playing', async () => {
     await createRoom(env.DB, 'test-room', 'SFO', 'San Francisco', 'US');
-    await updateRoomPlaying(env.DB, 'test-room', 'SFO', 'San Francisco', 'FRA', 'Frankfurt');
+    await updateRoomPlaying(env.DB, 'test-room', 'SFO', 'San Francisco', 'Player 1', 'FRA', 'Frankfurt', 'Player 2');
 
     const room = await getRoom(env.DB, 'test-room');
     expect(room?.status).toBe('playing');
@@ -100,7 +100,7 @@ describe('D1 room operations', () => {
 
   it('returns global stats', async () => {
     await createRoom(env.DB, 'room-1', 'SFO', 'San Francisco', 'US');
-    await updateRoomPlaying(env.DB, 'room-1', 'SFO', 'San Francisco', 'FRA', 'Frankfurt');
+    await updateRoomPlaying(env.DB, 'room-1', 'SFO', 'San Francisco', 'Player 1', 'FRA', 'Frankfurt', 'Player 2');
 
     await createRoom(env.DB, 'room-2', 'FRA', 'Frankfurt', 'DE');
     await saveGameResults(env.DB, 'room-2', 1, 5, 3, 10, 5, 100);

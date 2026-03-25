@@ -11,12 +11,16 @@ import {
   resetBall,
   createPaddle,
 } from './physics';
-import { saveGameResults as saveGameResultsD1, updateRoomPlaying } from './d1-queries';
+import { saveGameResults as saveGameResultsD1, updateRoomPlaying, updateRoomStatus, updatePlayerStats } from './d1-queries';
 import { generatePlayerName } from './room-names';
+
+// Fix 9: Emoji reaction whitelist
+const REACTION_WHITELIST = new Set(['🔥', '👏', '😱', '💀', '😂', '👀', '❤️', '🏓']);
 
 interface PlayerInfo {
   ws: WebSocket;
   slot: 1 | 2 | null; // null = spectator
+  role: 'player' | 'spectator';
   name: string;
   colo: string | null;
   city: string | null;
@@ -25,6 +29,7 @@ interface PlayerInfo {
   longitude: number | null;
   latency: number | null;
   connectedAt: string;
+  lastReactionTime: number; // Fix 9: rate limit
 }
 
 interface GameState {
@@ -33,7 +38,7 @@ interface GameState {
   paddle2: number; // y position
   score1: number;
   score2: number;
-  phase: 'waiting' | 'ready' | 'countdown' | 'playing' | 'scored' | 'finished';
+  phase: 'waiting' | 'ready' | 'countdown' | 'playing' | 'scored' | 'finished' | 'paused';
   countdownValue: number;
   rallyHits: number;
   currentRallyStart: number | null;
@@ -46,7 +51,7 @@ interface RallyStats {
   winner_slot: number | null;
 }
 
-export class GameRoom extends DurableObject {
+export class GameRoom extends DurableObject<Env> {
   private players: Map<WebSocket, PlayerInfo> = new Map();
   private gameState: GameState;
   private gameLoopInterval: number | null = null;
@@ -56,16 +61,31 @@ export class GameRoom extends DurableObject {
   private rallies: RallyStats[] = [];
   private gameStartTime: number | null = null;
   private aiEnabled: boolean = false;
-  private aiDifficulty: number = 0.5; // 0-1, how fast AI reacts
-  private aiTargetY: number = 0.5; // where AI thinks ball will be
-  private aiReactionTimer: number = 0; // frames until AI recalculates
-  private aiMistakeOffset: number = 0; // deliberate error
+  private aiDifficulty: number = 0.5;
+  private aiTargetY: number = 0.5;
+  private aiReactionTimer: number = 0;
+  private aiMistakeOffset: number = 0;
   private roomId: string | null = null;
+  
+  // Fix 2: Heartbeat interval
+  private heartbeatInterval: number | null = null;
+  
+  // Fix 3: Reconnection support
+  private disconnectedSlot: 1 | 2 | null = null;
+  private disconnectedSlotName: string | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectCountdownInterval: ReturnType<typeof setInterval> | null = null;
+  private reconnectSecondsLeft: number = 0;
+  
+  // Fix 6: End reason tracking
+  private endReason: 'completed' | 'disconnected' | 'abandoned' | null = null;
+  
+  // Fix 12: Double-save guard
+  private resultsSaved = false;
   
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     
-    // Initialize game state
     this.gameState = {
       ball: resetBall(),
       paddle1: 0.5,
@@ -78,23 +98,31 @@ export class GameRoom extends DurableObject {
       currentRallyStart: null,
     };
     
-    // Load persisted state from SQLite if exists
     this.ctx.blockConcurrencyWhile(async () => {
       await this.loadState();
     });
   }
   
   async fetch(request: Request): Promise<Response> {
-    // Upgrade HTTP to WebSocket
     const upgradeHeader = request.headers.get('Upgrade');
     if (upgradeHeader !== 'websocket') {
       return new Response('Expected WebSocket upgrade', { status: 426 });
     }
     
-    // Capture room ID from URL
     const url = new URL(request.url);
     const pathParts = url.pathname.split('/');
     this.roomId = pathParts[2] || null;
+    
+    // Fix 5: Reject WebSocket to terminal-state rooms
+    const terminalStates = ['finished', 'disconnected', 'abandoned'];
+    if (terminalStates.includes(this.gameState.phase)) {
+      const webSocketPair = new WebSocketPair();
+      const [client, server] = Object.values(webSocketPair);
+      this.ctx.acceptWebSocket(server);
+      this.send(server, { type: 'room_closed', reason: 'This game has ended.' });
+      server.close(1000, 'Room in terminal state');
+      return new Response(null, { status: 101, webSocket: client });
+    }
     
     // Check if AI opponent requested
     if (url.searchParams.get('ai') === 'true') {
@@ -106,14 +134,13 @@ export class GameRoom extends DurableObject {
     const webSocketPair = new WebSocketPair();
     const [client, server] = Object.values(webSocketPair);
     
-    // Accept the WebSocket connection
     this.ctx.acceptWebSocket(server);
     
-    // Store player info
     const cf = request.cf;
     const playerInfo: PlayerInfo = {
       ws: server,
-      slot: null, // will assign below
+      slot: null,
+      role: 'spectator',
       name: generatePlayerName(),
       colo: (cf?.colo as string) || null,
       city: (cf?.city as string) || null,
@@ -122,6 +149,7 @@ export class GameRoom extends DurableObject {
       longitude: parseFloat(cf?.longitude as string) || null,
       latency: null,
       connectedAt: new Date().toISOString(),
+      lastReactionTime: 0,
     };
     
     // Assign player slot
@@ -129,25 +157,96 @@ export class GameRoom extends DurableObject {
     const player1 = existingPlayers.find((p) => p.slot === 1);
     const player2 = existingPlayers.find((p) => p.slot === 2);
     
+    // Fix 3: Check if this connection is a reconnect during grace period
+    if (this.disconnectedSlot && !this.isSlotOccupied(this.disconnectedSlot)) {
+      // Reconnecting player gets the disconnected slot
+      playerInfo.slot = this.disconnectedSlot;
+      playerInfo.role = 'player';
+      // Preserve original slot name (Fix 3: slot name preservation)
+      if (this.disconnectedSlotName) {
+        playerInfo.name = this.disconnectedSlotName;
+      }
+      
+      // Clear reconnect timers
+      this.clearReconnectTimers();
+      this.disconnectedSlot = null;
+      this.disconnectedSlotName = null;
+      
+      this.players.set(server, playerInfo);
+      
+      // Send role assignment
+      this.send(server, {
+        type: 'role',
+        role: `player${playerInfo.slot}`,
+        slot: playerInfo.slot,
+        name: playerInfo.name,
+      });
+      
+      // Resume game: broadcast reconnect, then 3-2-1 countdown
+      this.broadcast({
+        type: 'player_reconnected',
+        slot: playerInfo.slot,
+        name: playerInfo.name,
+      });
+      
+      // Resume with countdown
+      this.startResumeCountdown();
+      
+      await this.savePlayerConnection(playerInfo);
+      this.logEvent('player_reconnected', playerInfo.slot, playerInfo, { name: playerInfo.name });
+      this.broadcastState();
+      
+      return new Response(null, { status: 101, webSocket: client });
+    }
+    
     if (!player1) {
       playerInfo.slot = 1;
-    } else if (!player2) {
+      playerInfo.role = 'player';
+    } else if (!player2 && !this.aiEnabled) {
       playerInfo.slot = 2;
+      playerInfo.role = 'player';
     } else {
-      playerInfo.slot = null; // spectator
+      playerInfo.slot = null;
+      playerInfo.role = 'spectator';
     }
     
     this.players.set(server, playerInfo);
     
-    // Send role assignment with player name
+    // Send role assignment
     this.send(server, {
       type: 'role',
-      role: playerInfo.slot ? `player${playerInfo.slot}` : 'spectator',
+      role: playerInfo.role === 'player' ? `player${playerInfo.slot}` : 'spectator',
       slot: playerInfo.slot,
       name: playerInfo.name,
     });
     
-    // If we now have 2 players, set ready and let them start
+    // Update spectator count and notify lobby
+    if (playerInfo.role === 'spectator') {
+      this.notifyLobbySpectatorCount();
+      
+      // Fix 13: If AI game, send spectator info
+      if (this.aiEnabled) {
+        this.send(server, { type: 'spectator_info', message: 'Watching AI game' });
+      }
+      
+      // Fix 3: If game is paused, send pause state to new spectator
+      if (this.gameState.phase === 'paused' && this.disconnectedSlot) {
+        this.send(server, {
+          type: 'game_paused',
+          disconnectedSlot: this.disconnectedSlot,
+          remainingSeconds: this.reconnectSecondsLeft,
+          score1: this.gameState.score1,
+          score2: this.gameState.score2,
+        });
+      }
+    }
+    
+    // Fix 2: Start heartbeat on first player connect
+    if (playerInfo.slot === 1 && !this.heartbeatInterval) {
+      this.startHeartbeat();
+    }
+    
+    // If we now have 2 players, set ready
     if ((!player1 && player2 && playerInfo.slot === 1) ||
         (player1 && !player2 && playerInfo.slot === 2)) {
       this.gameState.phase = 'ready';
@@ -160,34 +259,44 @@ export class GameRoom extends DurableObject {
         player1Name: pp1?.name || 'Player 1',
         player2Name: pp2?.name || 'Player 2',
       });
+      
+      // Notify lobby: transition to ready
+      this.notifyLobbyUpdate({
+        status: 'ready',
+        player2Name: pp2?.name || null,
+        player2Colo: pp2?.colo || null,
+        player2City: pp2?.city || null,
+      });
     } else if (playerInfo.slot && !this.aiEnabled) {
-      // Only one player so far
       this.send(server, { type: 'waiting', message: 'Waiting for Player 2...' });
+      
+      // Register with lobby (waiting state)
+      if (playerInfo.slot === 1) {
+        this.notifyLobbyRegister();
+        
+        // Fix 16: Set 10-minute waiting room expiry alarm
+        await this.ctx.storage.setAlarm(Date.now() + 10 * 60 * 1000);
+      }
     }
     
-    // If AI mode and first player just connected, start immediately
+    // Fix 4: AI games register as 'playing' immediately
     if (this.aiEnabled && playerInfo.slot === 1 && !player2) {
       this.send(server, {
         type: 'ai_opponent',
         difficulty: this.aiDifficulty,
         aiName: 'AI 🤖',
       });
+      // Start countdown first, THEN register with lobby as 'playing'
       this.startCountdown();
+      // Register after startCountdown so lobby sees 'playing' status
+      this.notifyLobbyRegisterAsPlaying();
     }
     
-    // Save player connection to SQLite
     await this.savePlayerConnection(playerInfo);
-    
-    // Log analytics
     this.logEvent('player_joined', playerInfo.slot, playerInfo, { name: playerInfo.name });
-    
-    // Broadcast current state
     this.broadcastState();
     
-    return new Response(null, {
-      status: 101,
-      webSocket: client,
-    });
+    return new Response(null, { status: 101, webSocket: client });
   }
   
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
@@ -199,9 +308,29 @@ export class GameRoom extends DurableObject {
       
       if (!player) return;
       
+      // Spectators can only send reactions
+      if (player.role === 'spectator') {
+        if (data.type === 'reaction') {
+          // Fix 9: Server-side validation
+          if (!REACTION_WHITELIST.has(data.emoji)) return;
+          
+          // Fix 9: Rate limit - max 1 per 2 seconds per connection
+          const now = Date.now();
+          if (now - player.lastReactionTime < 2000) return;
+          player.lastReactionTime = now;
+          
+          this.broadcast({
+            type: 'reaction',
+            emoji: data.emoji,
+            from: player.name,
+          });
+        }
+        return;
+      }
+      
+      // Player-only actions
       switch (data.type) {
         case 'paddle':
-          // Update paddle position for this player
           if (player.slot === 1) {
             this.gameState.paddle1 = Math.max(0.075, Math.min(0.925, data.y));
           } else if (player.slot === 2) {
@@ -210,19 +339,16 @@ export class GameRoom extends DurableObject {
           break;
           
         case 'start_game':
-          // Any player can request game start
           if (player.slot && this.gameState.phase === 'ready') {
             this.startCountdown();
           }
           break;
           
         case 'ping':
-          // Respond with pong for latency measurement
           this.send(ws, { type: 'pong', timestamp: data.timestamp });
           break;
           
         case 'pong':
-          // Calculate latency
           if (data.timestamp) {
             player.latency = Date.now() - data.timestamp;
           }
@@ -237,48 +363,305 @@ export class GameRoom extends DurableObject {
     const player = this.players.get(ws);
     this.players.delete(ws);
     
-    // If a player (not spectator) disconnects, end the game
     if (player?.slot) {
-      this.gameState.phase = 'finished';
-      this.stopGameLoop();
+      // Fix 3: Check if game is in a playable state for grace period
+      const playablePhases = ['playing', 'scored', 'countdown', 'paused'];
       
-      // Broadcast game ended
-      this.broadcast({
-        type: 'game_ended',
-        reason: 'player_disconnected',
-        disconnectedPlayer: player.slot,
-      });
+      if (playablePhases.includes(this.gameState.phase)) {
+        // Check if both players are now disconnected
+        const remainingPlayers = Array.from(this.players.values()).filter(p => p.slot !== null);
+        
+        if (remainingPlayers.length === 0 && !this.aiEnabled) {
+          // Both players disconnected - immediate end (Fix 3)
+          await this.endGame('abandoned');
+          return;
+        }
+        
+        // Check if we're already in a pause state (other player already disconnected)
+        if (this.disconnectedSlot) {
+          // Second player also disconnected during grace - end immediately
+          this.clearReconnectTimers();
+          await this.endGame('abandoned');
+          return;
+        }
+        
+        // Start grace period (Fix 3)
+        this.disconnectedSlot = player.slot;
+        this.disconnectedSlotName = player.name;
+        this.gameState.phase = 'paused';
+        this.reconnectSecondsLeft = 15;
+        
+        // Broadcast disconnection to all connections
+        this.broadcast({
+          type: 'player_disconnected',
+          slot: player.slot,
+          timeout: 15,
+          name: player.name,
+        });
+        
+        // Start countdown timer (broadcasts remaining time)
+        this.reconnectCountdownInterval = setInterval(() => {
+          this.reconnectSecondsLeft--;
+          if (this.reconnectSecondsLeft <= 0) {
+            this.clearReconnectTimers();
+          }
+          // Keep broadcasting frozen state during pause
+          this.broadcastState();
+        }, 1000);
+        
+        // Set 15-second reconnect timeout
+        const disconnectedSlotForTimer = player.slot!;
+        this.reconnectTimer = setTimeout(async () => {
+          this.clearReconnectTimers();
+          // Grace period expired
+          const hasScore = this.gameState.score1 > 0 || this.gameState.score2 > 0;
+          if (hasScore) {
+            await this.endGame('disconnected', disconnectedSlotForTimer);
+          } else {
+            await this.endGame('abandoned');
+          }
+        }, 15000);
+        
+        return;
+      }
       
-      // Save game results
-      await this.saveGameResults();
+      // Game not in playable state - handle based on phase
+      if (this.gameState.phase === 'waiting' || this.gameState.phase === 'ready') {
+        // Player left before game started
+        await this.endGame('abandoned');
+        return;
+      }
       
-      // Set alarm to clean up room in 30 minutes
-      await this.ctx.storage.setAlarm(Date.now() + 30 * 60 * 1000);
+      // Already finished or other terminal state
+      if (this.gameState.phase === 'finished') {
+        // Nothing to do, game already ended
+        return;
+      }
+    } else if (player?.role === 'spectator') {
+      this.notifyLobbySpectatorCount();
     }
   }
   
   async alarm() {
-    // Room expired - clean up
-    console.log('Room alarm triggered - cleaning up');
+    // Fix 16: Waiting room expiry
+    if (this.gameState.phase === 'waiting') {
+      console.log('Waiting room expired after 10 minutes');
+      
+      // Update D1 status to expired
+      if (this.roomId) {
+        await updateRoomStatus(this.env.DB, this.roomId, 'expired').catch(err =>
+          console.error('D1 expire error:', err)
+        );
+      }
+      
+      // Notify all connections
+      this.broadcast({ type: 'room_closed', reason: 'Room expired - no opponent joined in 10 minutes.' });
+      
+      // Close all connections
+      for (const ws of this.players.keys()) {
+        ws.close(1000, 'Room expired');
+      }
+      this.players.clear();
+      
+      this.cleanup();
+      this.notifyLobbyUnregister();
+      
+      await this.ctx.storage.deleteAll();
+      return;
+    }
     
-    // Close all connections
+    // Fix 16: Reschedule for active games (30 min cleanup)
+    if (['playing', 'paused', 'countdown', 'ready'].includes(this.gameState.phase)) {
+      await this.ctx.storage.setAlarm(Date.now() + 30 * 60 * 1000);
+      return;
+    }
+    
+    // Terminal state - clean up room entirely
+    console.log('Room alarm triggered - cleaning up');
     for (const ws of this.players.keys()) {
       ws.close(1000, 'Room expired');
     }
-    
     this.players.clear();
-    this.stopGameLoop();
-    
-    // Clear storage
+    this.cleanup();
     await this.ctx.storage.deleteAll();
   }
   
-  // Game loop - runs at 60fps
+  // Fix 2: Start heartbeat
+  private startHeartbeat() {
+    if (this.heartbeatInterval) return;
+    this.heartbeatInterval = setInterval(() => {
+      this.callLobby('/heartbeat', { roomId: this.roomId }).catch(err =>
+        console.error('Heartbeat error:', err)
+      );
+    }, 30000) as unknown as number;
+  }
+  
+  // Fix 2: Cleanup method - called by all game-end paths
+  private cleanup() {
+    this.stopGameLoop();
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+    this.clearReconnectTimers();
+  }
+  
+  // Fix 3: Clear reconnect timers
+  private clearReconnectTimers() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.reconnectCountdownInterval) {
+      clearInterval(this.reconnectCountdownInterval);
+      this.reconnectCountdownInterval = null;
+    }
+  }
+  
+  // Fix 3: Check if a slot is currently occupied
+  private isSlotOccupied(slot: 1 | 2): boolean {
+    for (const p of this.players.values()) {
+      if (p.slot === slot) return true;
+    }
+    return false;
+  }
+  
+  // Fix 3: Resume game after reconnection with 3-2-1 countdown
+  private startResumeCountdown() {
+    this.gameState.phase = 'countdown';
+    this.gameState.countdownValue = 3;
+    
+    const countdownInterval = setInterval(() => {
+      if (this.gameState.countdownValue > 0) {
+        this.broadcast({
+          type: 'countdown',
+          value: this.gameState.countdownValue,
+        });
+        this.gameState.countdownValue--;
+      } else {
+        clearInterval(countdownInterval);
+        this.gameState.phase = 'playing';
+        this.gameState.currentRallyStart = Date.now();
+        this.broadcast({ type: 'game_start' });
+        // Game loop should already be running; if not, restart it
+        if (!this.gameLoopInterval) {
+          this.startGameLoop();
+        }
+      }
+    }, 1000);
+  }
+  
+  /**
+   * Unified game-end handler. All 7 game-end paths go through here.
+   * Every path calls: notifyLobbyUnregister() + D1 status update + cleanup()
+   */
+  private async endGame(reason: 'completed' | 'disconnected' | 'abandoned', disconnectedPlayerSlot?: number) {
+    this.endReason = reason;
+    this.gameState.phase = 'finished';
+    this.cleanup();
+    
+    const hasScore = this.gameState.score1 > 0 || this.gameState.score2 > 0;
+    const longestRally = this.rallies.length > 0 ? Math.max(...this.rallies.map(r => r.hits)) : 0;
+    const duration = this.gameStartTime ? Math.round((Date.now() - this.gameStartTime) / 1000) : 0;
+    
+    if (reason === 'completed') {
+      // Fix 1: First to 5
+      const winnerSlot = this.gameState.score1 >= 5 ? 1 : 2;
+      
+      this.broadcast({
+        type: 'game_over',
+        winner: winnerSlot,
+        score1: this.gameState.score1,
+        score2: this.gameState.score2,
+        rallies: this.rallies,
+      });
+      
+      // Fix 12: Save results with guard
+      await this.saveGameResults(winnerSlot, 'finished');
+      
+      // Fix 7: Update leaderboard
+      await this.updateLeaderboard(winnerSlot, longestRally);
+      
+    } else if (reason === 'disconnected' && hasScore) {
+      // Fix 6: Has score + disconnect → winner is remaining player
+      const winnerSlot = disconnectedPlayerSlot === 1 ? 2 : 1;
+      
+      this.broadcast({
+        type: 'game_over',
+        winner: winnerSlot,
+        score1: this.gameState.score1,
+        score2: this.gameState.score2,
+        reason: 'opponent_disconnected',
+        rallies: this.rallies,
+      });
+      
+      await this.saveGameResults(winnerSlot, 'disconnected');
+      
+      // Fix 7: Update leaderboard for disconnect wins too
+      await this.updateLeaderboard(winnerSlot, longestRally);
+      
+    } else {
+      // Abandoned: no score + disconnect, or both disconnect
+      this.broadcast({
+        type: 'game_ended',
+        reason: 'abandoned',
+      });
+      
+      // Fix 6: Don't save game results for abandoned, just update D1 status
+      if (this.roomId) {
+        await updateRoomStatus(this.env.DB, this.roomId, 'abandoned').catch(err =>
+          console.error('D1 abandon error:', err)
+        );
+      }
+    }
+    
+    // Every game-end path: unregister from lobby
+    this.notifyLobbyUnregister();
+    
+    // Log analytics
+    this.logEvent('game_over', null, null, {
+      reason,
+      score1: this.gameState.score1,
+      score2: this.gameState.score2,
+      rallies: this.rallies.length,
+      duration_seconds: duration,
+    });
+    
+    // Set alarm to clean up room data in 30 minutes
+    await this.ctx.storage.setAlarm(Date.now() + 30 * 60 * 1000);
+  }
+  
+  // Fix 7: Update leaderboard, excluding AI
+  private async updateLeaderboard(winnerSlot: number, longestRally: number) {
+    const players = Array.from(this.players.values());
+    const p1 = players.find(p => p.slot === 1);
+    const p2 = players.find(p => p.slot === 2);
+    
+    // Get names from current players or from disconnected slot name
+    const p1Name = p1?.name || (this.disconnectedSlotName && this.disconnectedSlot === 1 ? this.disconnectedSlotName : 'Player 1');
+    const p2Name = this.aiEnabled ? 'AI 🤖' : (p2?.name || (this.disconnectedSlotName && this.disconnectedSlot === 2 ? this.disconnectedSlotName : 'Player 2'));
+    
+    try {
+      // Player 1 stats (always human)
+      if (p1Name && p1Name !== 'Player 1') {
+        await updatePlayerStats(this.env.DB, p1Name, winnerSlot === 1, longestRally);
+      }
+      
+      // Player 2 stats (only if human, not AI - Fix 7)
+      if (!this.aiEnabled && p2Name && p2Name !== 'Player 2') {
+        await updatePlayerStats(this.env.DB, p2Name, winnerSlot === 2, longestRally);
+      }
+    } catch (err) {
+      console.error('Leaderboard update error:', err);
+    }
+  }
+  
+  // Game loop
   private startGameLoop() {
     if (this.gameLoopInterval !== null) return;
     
     this.lastTickTime = Date.now();
-    this.gameStartTime = Date.now();
+    this.gameStartTime = this.gameStartTime || Date.now();
     
     this.gameLoopInterval = setInterval(() => {
       this.gameTick();
@@ -293,30 +676,30 @@ export class GameRoom extends DurableObject {
   }
   
   private gameTick() {
-    if (this.gameState.phase !== 'playing' && this.gameState.phase !== 'scored') return;
-    if (this.gameState.phase === 'scored') {
-      // During scored pause, still broadcast state but skip physics
+    // Fix 3: During pause, keep broadcasting frozen state but skip physics
+    if (this.gameState.phase === 'paused') {
       this.broadcastCounter++;
       if (this.broadcastCounter % 2 === 0) this.broadcastState();
       return;
     }
     
-    // AI paddle movement (if enabled, AI is always player 2)
+    if (this.gameState.phase !== 'playing' && this.gameState.phase !== 'scored') return;
+    if (this.gameState.phase === 'scored') {
+      this.broadcastCounter++;
+      if (this.broadcastCounter % 2 === 0) this.broadcastState();
+      return;
+    }
+    
+    // AI paddle movement
     if (this.aiEnabled) {
       const ball = this.gameState.ball;
       const currentY = this.gameState.paddle2;
       
-      // AI only recalculates target periodically (simulates reaction time)
       this.aiReactionTimer--;
       if (this.aiReactionTimer <= 0) {
-        // Reset reaction timer: lower difficulty = slower reactions
         this.aiReactionTimer = Math.floor(8 + (1 - this.aiDifficulty) * 15);
-        
-        // AI predicts ball position but with error
         this.aiTargetY = ball.y;
         
-        // Add deliberate mistake: AI sometimes aims wrong
-        // Bigger mistakes at lower difficulty
         const mistakeChance = 0.15 * (1 - this.aiDifficulty);
         if (Math.random() < mistakeChance) {
           this.aiMistakeOffset = (Math.random() - 0.5) * 0.3;
@@ -324,16 +707,13 @@ export class GameRoom extends DurableObject {
           this.aiMistakeOffset = (Math.random() - 0.5) * 0.08;
         }
         
-        // AI only reacts well when ball is coming toward it (x velocity > 0)
         if (ball.vx < 0) {
-          // Ball going away: AI drifts toward center lazily
           this.aiTargetY = 0.5 + (Math.random() - 0.5) * 0.2;
         }
       }
       
       const target = this.aiTargetY + this.aiMistakeOffset;
       const diff = target - currentY;
-      // Speed: lower difficulty = slower paddle
       const speed = 0.008 + 0.012 * this.aiDifficulty;
       
       if (Math.abs(diff) > 0.03) {
@@ -345,11 +725,8 @@ export class GameRoom extends DurableObject {
     
     // Update ball position
     let ball = updateBall(this.gameState.ball);
-    
-    // Check wall bounces
     ball = checkWallBounce(ball);
     
-    // Check paddle collisions
     const leftPaddleCheck = checkPaddleCollision(ball, this.gameState.paddle1, 'left');
     if (leftPaddleCheck.hit) {
       ball = leftPaddleCheck.ball;
@@ -362,17 +739,14 @@ export class GameRoom extends DurableObject {
       this.gameState.rallyHits++;
     }
     
-    // Check scoring
     const scoreCheck = checkScore(ball);
     if (scoreCheck.scored && scoreCheck.scorer) {
-      // Someone scored!
       if (scoreCheck.scorer === 1) {
         this.gameState.score1++;
       } else {
         this.gameState.score2++;
       }
       
-      // Record rally
       if (this.gameState.currentRallyStart !== null) {
         this.rallies.push({
           started_at: new Date(this.gameState.currentRallyStart).toISOString(),
@@ -382,7 +756,6 @@ export class GameRoom extends DurableObject {
         });
       }
       
-      // Broadcast score event
       this.broadcast({
         type: 'score',
         scorer: scoreCheck.scorer,
@@ -391,34 +764,19 @@ export class GameRoom extends DurableObject {
         rallyHits: this.gameState.rallyHits,
       });
       
-      // Log to analytics
+      this.notifyLobbyUpdate({
+        score: [this.gameState.score1, this.gameState.score2],
+      });
+      
       this.logEvent('point_scored', scoreCheck.scorer, null, {
         score1: this.gameState.score1,
         score2: this.gameState.score2,
         rally_hits: this.gameState.rallyHits,
       });
       
-      // Check for game over (first to 5)
+      // Fix 1: First to 5 points
       if (this.gameState.score1 >= 5 || this.gameState.score2 >= 5) {
-        this.gameState.phase = 'finished';
-        this.stopGameLoop();
-        
-        this.broadcast({
-          type: 'game_over',
-          winner: this.gameState.score1 >= 5 ? 1 : 2,
-          score1: this.gameState.score1,
-          score2: this.gameState.score2,
-          rallies: this.rallies,
-        });
-        
-        // Save results + analytics
-        this.ctx.waitUntil(this.saveGameResults());
-        this.logEvent('game_over', this.gameState.score1 >= 5 ? 1 : 2, null, {
-          score1: this.gameState.score1,
-          score2: this.gameState.score2,
-          rallies: this.rallies.length,
-          duration_seconds: this.gameStartTime ? Math.round((Date.now() - this.gameStartTime) / 1000) : 0,
-        });
+        this.ctx.waitUntil(this.endGame('completed'));
         return;
       }
       
@@ -428,7 +786,6 @@ export class GameRoom extends DurableObject {
       this.gameState.rallyHits = 0;
       this.gameState.currentRallyStart = null;
       
-      // Short pause, then resume
       setTimeout(() => {
         if (this.gameState.phase === 'scored') {
           this.gameState.phase = 'playing';
@@ -436,11 +793,9 @@ export class GameRoom extends DurableObject {
         }
       }, 1000);
     } else {
-      // Update ball
       this.gameState.ball = ball;
     }
     
-    // Broadcast state every other tick (30fps network, 60fps physics)
     this.broadcastCounter++;
     if (this.broadcastCounter % 2 === 0) {
       this.broadcastState();
@@ -466,6 +821,13 @@ export class GameRoom extends DurableObject {
       );
     }
     
+    // Notify lobby: game starting (for human games)
+    if (!this.aiEnabled) {
+      this.notifyLobbyUpdate({
+        status: 'playing',
+      });
+    }
+    
     const countdownInterval = setInterval(() => {
       if (this.gameState.countdownValue > 0) {
         this.broadcast({
@@ -486,7 +848,7 @@ export class GameRoom extends DurableObject {
   }
   
   private broadcastState() {
-    const state = {
+    const state: any = {
       type: 'state',
       ball: this.gameState.ball,
       paddle1: this.gameState.paddle1,
@@ -494,7 +856,14 @@ export class GameRoom extends DurableObject {
       score1: this.gameState.score1,
       score2: this.gameState.score2,
       phase: this.gameState.phase,
+      spectatorCount: this.getSpectatorCount(),
     };
+    
+    // Fix 3: Include pause info in state broadcasts
+    if (this.gameState.phase === 'paused' && this.disconnectedSlot) {
+      state.disconnectedSlot = this.disconnectedSlot;
+      state.remainingSeconds = this.reconnectSecondsLeft;
+    }
     
     this.broadcast(state);
   }
@@ -523,7 +892,6 @@ export class GameRoom extends DurableObject {
     try {
       const sql = this.ctx.storage.sql;
       
-      // Create tables if they don't exist
       sql.exec(`
         CREATE TABLE IF NOT EXISTS game_state (
           key TEXT PRIMARY KEY,
@@ -551,7 +919,6 @@ export class GameRoom extends DurableObject {
         )
       `);
       
-      // Load rallies
       const rallyRows = sql.exec<{
         started_at: string;
         ended_at: string;
@@ -583,11 +950,14 @@ export class GameRoom extends DurableObject {
     }
   }
   
-  private async saveGameResults() {
+  // Fix 12: Guard against double saves
+  private async saveGameResults(winnerSlot: number, status: 'finished' | 'disconnected') {
+    if (this.resultsSaved) return;
+    this.resultsSaved = true;
+    
     try {
       const sql = this.ctx.storage.sql;
       
-      // Save rallies to DO local storage
       for (const rally of this.rallies) {
         sql.exec(
           `INSERT INTO rallies (started_at, ended_at, hits, winner_slot) VALUES (?, ?, ?, ?)`,
@@ -600,9 +970,7 @@ export class GameRoom extends DurableObject {
       
       const longestRally = this.rallies.length > 0 ? Math.max(...this.rallies.map((r) => r.hits)) : 0;
       const duration = this.gameStartTime ? (Date.now() - this.gameStartTime) / 1000 : 0;
-      const winnerSlot = this.gameState.score1 >= 5 ? 1 : 2;
       
-      // Save final game state to DO local storage
       const gameData = JSON.stringify({
         score1: this.gameState.score1,
         score2: this.gameState.score2,
@@ -616,7 +984,7 @@ export class GameRoom extends DurableObject {
         gameData
       );
       
-      // Also save to D1 so homepage can show recent games
+      // Save to D1 with explicit status (Fix 6)
       if (this.roomId) {
         try {
           await saveGameResultsD1(
@@ -627,7 +995,8 @@ export class GameRoom extends DurableObject {
             this.gameState.score2,
             this.rallies.length,
             longestRally,
-            Math.round(duration)
+            Math.round(duration),
+            status
           );
         } catch (d1Err) {
           console.error('Error saving to D1:', d1Err);
@@ -638,7 +1007,6 @@ export class GameRoom extends DurableObject {
     }
   }
   
-  // Fire-and-forget analytics event to Postgres via main Worker
   private logEvent(eventType: string, playerSlot: number | null, playerInfo: PlayerInfo | null, metadata: Record<string, any> = {}) {
     const body = JSON.stringify({
       room_id: this.roomId,
@@ -651,7 +1019,6 @@ export class GameRoom extends DurableObject {
       longitude: playerInfo?.longitude || null,
       metadata,
     });
-    // Use waitUntil so it doesn't block game logic
     this.ctx.waitUntil(
       fetch('https://pong.jeka.org/api/event', {
         method: 'POST',
@@ -660,11 +1027,113 @@ export class GameRoom extends DurableObject {
       }).catch(err => console.error('Analytics event error:', err))
     );
   }
+  
+  // Lobby notification methods
+  
+  private notifyLobbyRegister() {
+    if (!this.roomId) return;
+    
+    const players = Array.from(this.players.values());
+    const p1 = players.find(p => p.slot === 1);
+    const p2 = players.find(p => p.slot === 2);
+    
+    const roomInfo = {
+      roomId: this.roomId,
+      status: this.gameState.phase === 'waiting' ? 'waiting' : 'playing',
+      player1Name: p1?.name || '',
+      player2Name: p2?.name || null,
+      player1Colo: p1?.colo || null,
+      player2Colo: p2?.colo || null,
+      player1City: p1?.city || null,
+      player2City: p2?.city || null,
+      score: [this.gameState.score1, this.gameState.score2] as [number, number],
+      spectatorCount: this.getSpectatorCount(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    
+    this.ctx.waitUntil(
+      this.callLobby('/register', roomInfo).catch(err => 
+        console.error('Lobby register error:', err)
+      )
+    );
+  }
+  
+  // Fix 4: AI games register as 'playing' with AI name
+  private notifyLobbyRegisterAsPlaying() {
+    if (!this.roomId) return;
+    
+    const players = Array.from(this.players.values());
+    const p1 = players.find(p => p.slot === 1);
+    
+    const roomInfo = {
+      roomId: this.roomId,
+      status: 'playing',
+      player1Name: p1?.name || '',
+      player2Name: 'AI 🤖',
+      player1Colo: p1?.colo || null,
+      player2Colo: null,
+      player1City: p1?.city || null,
+      player2City: null,
+      score: [0, 0] as [number, number],
+      spectatorCount: this.getSpectatorCount(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    
+    this.ctx.waitUntil(
+      this.callLobby('/register', roomInfo).catch(err =>
+        console.error('Lobby register (AI) error:', err)
+      )
+    );
+  }
+  
+  private notifyLobbyUpdate(patch: any) {
+    if (!this.roomId) return;
+    
+    this.ctx.waitUntil(
+      this.callLobby('/update', {
+        roomId: this.roomId,
+        patch,
+      }).catch(err => console.error('Lobby update error:', err))
+    );
+  }
+  
+  private notifyLobbyUnregister() {
+    if (!this.roomId) return;
+    
+    this.ctx.waitUntil(
+      this.callLobby('/unregister', {
+        roomId: this.roomId,
+      }).catch(err => console.error('Lobby unregister error:', err))
+    );
+  }
+  
+  private notifyLobbySpectatorCount() {
+    this.notifyLobbyUpdate({
+      spectatorCount: this.getSpectatorCount(),
+    });
+  }
+  
+  private getSpectatorCount(): number {
+    return Array.from(this.players.values()).filter(p => p.role === 'spectator').length;
+  }
+  
+  private async callLobby(path: string, body: any): Promise<void> {
+    const lobbyId = this.env.LOBBY.idFromName('global');
+    const lobby = this.env.LOBBY.get(lobbyId);
+    await lobby.fetch(`https://lobby${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
 }
 
 // Type definitions
 interface Env {
   GAME_ROOM: DurableObjectNamespace;
+  LOBBY: DurableObjectNamespace;
   DB: D1Database;
   HYPERDRIVE: Hyperdrive;
 }

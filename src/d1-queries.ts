@@ -6,7 +6,7 @@ export interface RoomRecord {
   creator_colo: string | null;
   creator_city: string | null;
   creator_country: string | null;
-  status: 'waiting' | 'playing' | 'finished' | 'expired';
+  status: 'waiting' | 'playing' | 'finished' | 'expired' | 'disconnected' | 'abandoned';
   finished_at: string | null;
   player1_colo: string | null;
   player2_colo: string | null;
@@ -85,7 +85,7 @@ export async function updateRoomPlaying(
 }
 
 /**
- * Save game results
+ * Save game results with explicit status (Fix 6: three cases)
  */
 export async function saveGameResults(
   db: D1Database,
@@ -95,12 +95,13 @@ export async function saveGameResults(
   score2: number,
   totalRallies: number,
   longestRally: number,
-  durationSeconds: number
+  durationSeconds: number,
+  status: 'finished' | 'disconnected' = 'finished'
 ): Promise<void> {
   await db
     .prepare(
       `UPDATE rooms
-       SET status = 'finished',
+       SET status = ?,
            finished_at = ?,
            winner_slot = ?,
            final_score = ?,
@@ -110,6 +111,7 @@ export async function saveGameResults(
        WHERE id = ?`
     )
     .bind(
+      status,
       new Date().toISOString(),
       winnerSlot,
       `${score1}-${score2}`,
@@ -118,6 +120,22 @@ export async function saveGameResults(
       durationSeconds,
       roomId
     )
+    .run();
+}
+
+/**
+ * Update room status without game results (for abandoned/expired)
+ */
+export async function updateRoomStatus(
+  db: D1Database,
+  roomId: string,
+  status: 'expired' | 'abandoned' | 'disconnected'
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE rooms SET status = ?, finished_at = ? WHERE id = ?`
+    )
+    .bind(status, new Date().toISOString(), roomId)
     .run();
 }
 
@@ -146,7 +164,7 @@ export async function getRecentGames(
   const result = await db
     .prepare(
       `SELECT * FROM rooms 
-       WHERE status = 'finished'
+       WHERE status IN ('finished', 'disconnected')
        ORDER BY finished_at DESC
        LIMIT ?`
     )
@@ -176,7 +194,7 @@ export async function getLeaderboard(
 }
 
 /**
- * Update player stats after game
+ * Update player stats after game (Fix 7)
  */
 export async function updatePlayerStats(
   db: D1Database,
@@ -212,7 +230,7 @@ export async function updatePlayerStats(
 }
 
 /**
- * Get global stats
+ * Fix 18: Get global stats - active_games includes waiting+playing+ready
  */
 export async function getGlobalStats(db: D1Database): Promise<{
   total_games: number;
@@ -223,7 +241,7 @@ export async function getGlobalStats(db: D1Database): Promise<{
     .prepare(
       `SELECT 
         COUNT(*) as total_games,
-        SUM(CASE WHEN status = 'playing' THEN 1 ELSE 0 END) as active_games
+        SUM(CASE WHEN status IN ('waiting', 'playing', 'ready') THEN 1 ELSE 0 END) as active_games
        FROM rooms`
     )
     .first<{ total_games: number; active_games: number }>();
@@ -237,4 +255,15 @@ export async function getGlobalStats(db: D1Database): Promise<{
     active_games: gamesResult?.active_games || 0,
     total_players: playersResult?.total_players || 0,
   };
+}
+
+/**
+ * Fix 11: Clean stale waiting rooms from D1 (15-minute threshold)
+ */
+export async function cleanStaleRooms(db: D1Database): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE rooms SET status = 'expired' WHERE status = 'waiting' AND created_at < datetime('now', '-15 minutes')`
+    )
+    .run();
 }
