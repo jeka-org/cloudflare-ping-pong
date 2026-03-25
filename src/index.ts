@@ -1411,6 +1411,7 @@ const GAME_HTML = `<!DOCTYPE html>
           }
           playSound('gameover');
           stopMusic();
+          gameActive = false;
           break;
           
         case 'game_ended':
@@ -1418,6 +1419,7 @@ const GAME_HTML = `<!DOCTYPE html>
           hidePauseOverlay();
           statusEl.textContent = 'GAME ENDED';
           stopMusic();
+          gameActive = false;
           break;
           
         case 'pong':
