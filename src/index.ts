@@ -929,7 +929,7 @@ const GAME_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
   <title>🔥 Global Pong</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1206,9 +1206,98 @@ const GAME_HTML = `<!DOCTYPE html>
       pointer-events: none;
       z-index: 5;
     }
+    /* Mobile orientation overlay */
+    #orientationOverlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(5,5,16,0.95);
+      z-index: 9999;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+    }
+    #orientationOverlay .rotate-icon {
+      font-size: 4rem;
+      animation: rotate-phone 2s ease-in-out infinite;
+      margin-bottom: 1.5rem;
+    }
+    @keyframes rotate-phone {
+      0%, 100% { transform: rotate(0deg); }
+      25% { transform: rotate(-90deg); }
+      50% { transform: rotate(-90deg); }
+      75% { transform: rotate(0deg); }
+    }
+    #orientationOverlay .rotate-msg {
+      font-size: 1.3rem;
+      color: #fbbf24;
+      margin-bottom: 2rem;
+      line-height: 1.5;
+    }
+    #orientationOverlay .play-anyway-btn {
+      background: rgba(249,115,22,0.15);
+      border: 1px solid rgba(249,115,22,0.4);
+      color: #fbbf24;
+      padding: 12px 28px;
+      font-size: 1rem;
+      font-family: 'Courier New', monospace;
+      cursor: pointer;
+      border-radius: 6px;
+      min-height: 48px;
+    }
+    /* Touch indicator */
+    .touch-indicator {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      pointer-events: none;
+      z-index: 6;
+      transform: translate(-50%, -50%);
+      display: none;
+    }
+    /* Mobile layout tweaks */
+    @media (max-width: 600px) {
+      .p1-name, .p2-name {
+        text-overflow: ellipsis;
+        overflow: hidden;
+        white-space: nowrap;
+        max-width: 45vw;
+      }
+      .home-link {
+        min-height: 44px;
+        min-width: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 12px;
+      }
+      #startBtn {
+        min-height: 48px;
+      }
+      #emojiBar button {
+        font-size: 1.8rem;
+        padding: 8px 10px;
+        min-width: 44px;
+        min-height: 44px;
+      }
+      #emojiBar {
+        gap: 10px;
+      }
+    }
   </style>
 </head>
 <body>
+  <!-- Orientation overlay for mobile portrait -->
+  <div id="orientationOverlay">
+    <div class="rotate-icon">📱</div>
+    <div class="rotate-msg">Rotate your phone for<br>the best experience</div>
+    <button class="play-anyway-btn" id="playAnywayBtn">Play anyway</button>
+  </div>
   <a href="/" class="home-link">🏠 LOBBY</a>
   <!-- Fix 14: Dedicated spectator badge element -->
   <div id="spectatorBadge">SPECTATING</div>
@@ -1216,7 +1305,9 @@ const GAME_HTML = `<!DOCTYPE html>
   <div class="game-wrap">
     <div class="flare"></div>
     <div style="position: relative;">
-      <canvas id="gameCanvas" width="800" height="600"></canvas>
+      <canvas id="gameCanvas"></canvas>
+      <div class="touch-indicator" id="touchIndicator1"></div>
+      <div class="touch-indicator" id="touchIndicator2"></div>
       <div class="scanlines"></div>
       <div id="status">CONNECTING...</div>
       <button id="startBtn">START GAME 🔥</button>
@@ -1263,9 +1354,112 @@ const GAME_HTML = `<!DOCTYPE html>
     const pauseText = document.getElementById('pauseText');
     const pauseTimer = document.getElementById('pauseTimer');
     const emojiBar = document.getElementById('emojiBar');
+    const touchIndicator1 = document.getElementById('touchIndicator1');
+    const touchIndicator2 = document.getElementById('touchIndicator2');
     let currentLatency = null;
     let player1Name = 'Player 1';
     let player2Name = 'Player 2';
+    
+    // Mobile detection
+    const isMobile = 'ontouchstart' in window;
+    const NUM_STARS = isMobile ? 15 : 30;
+    const HIT_PARTICLES = isMobile ? 4 : 8;
+    const TRAIL_MAX = isMobile ? 6 : 12;
+    
+    // Haptic feedback helper
+    function haptic(ms) { if (navigator.vibrate) navigator.vibrate(ms); }
+    
+    // Orientation detection for mobile
+    (function initOrientationCheck() {
+      if (!isMobile) return;
+      const overlay = document.getElementById('orientationOverlay');
+      const btn = document.getElementById('playAnywayBtn');
+      let dismissed = false;
+      
+      btn.addEventListener('click', () => {
+        dismissed = true;
+        overlay.style.display = 'none';
+      });
+      
+      function checkOrientation() {
+        if (dismissed) return;
+        const portrait = window.matchMedia('(orientation: portrait)').matches;
+        overlay.style.display = portrait ? 'flex' : 'none';
+      }
+      
+      checkOrientation();
+      window.matchMedia('(orientation: portrait)').addEventListener('change', checkOrientation);
+    })();
+    
+    // Responsive canvas sizing
+    function sizeCanvas() {
+      const maxW = 800;
+      const availW = Math.min(maxW, window.innerWidth - 40);
+      const w = Math.round(availW);
+      const h = Math.round(w * 0.75); // 4:3
+      canvas.width = w;
+      canvas.height = h;
+      rebuildVisualCache();
+    }
+    
+    // Visual cache variables (rebuilt on resize)
+    let paddleHeight, paddleWidth, paddleRadius, grad1, grad2;
+    let bgStars = [];
+    let vignetteCanvas, vCtx;
+    let centerLineGrad;
+    let frameCount = 0;
+    const centerDash = [10, 14];
+    const noDash = [];
+    
+    function rebuildVisualCache() {
+      paddleHeight = canvas.height * 0.15;
+      paddleWidth = canvas.width * 0.02;
+      paddleRadius = paddleWidth * 0.5;
+      
+      grad1 = ctx.createLinearGradient(0, 0, paddleWidth, 0);
+      grad1.addColorStop(0, '#f97316');
+      grad1.addColorStop(1, '#fbbf24');
+      grad2 = ctx.createLinearGradient(canvas.width - paddleWidth, 0, canvas.width, 0);
+      grad2.addColorStop(0, '#8b5cf6');
+      grad2.addColorStop(1, '#7c3aed');
+      
+      // Regenerate stars
+      bgStars = [];
+      for (let i = 0; i < NUM_STARS; i++) {
+        bgStars.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          size: Math.random() < 0.3 ? 2 : 1,
+          alpha: 0.15 + Math.random() * 0.45
+        });
+      }
+      
+      // Rebuild vignette
+      if (!vignetteCanvas) vignetteCanvas = document.createElement('canvas');
+      vignetteCanvas.width = canvas.width;
+      vignetteCanvas.height = canvas.height;
+      vCtx = vignetteCanvas.getContext('2d');
+      const vGrad = vCtx.createRadialGradient(
+        canvas.width * 0.5, canvas.height * 0.5, canvas.height * 0.25,
+        canvas.width * 0.5, canvas.height * 0.5, canvas.width * 0.7
+      );
+      vGrad.addColorStop(0, 'rgba(0,0,0,0)');
+      vGrad.addColorStop(1, 'rgba(0,0,0,0.4)');
+      vCtx.fillStyle = vGrad;
+      vCtx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Rebuild center line gradient
+      centerLineGrad = ctx.createLinearGradient(canvas.width * 0.5 - 6, 0, canvas.width * 0.5 + 6, 0);
+      centerLineGrad.addColorStop(0, 'rgba(60,100,220,0)');
+      centerLineGrad.addColorStop(0.3, 'rgba(60,100,220,0.06)');
+      centerLineGrad.addColorStop(0.5, 'rgba(80,120,255,0.15)');
+      centerLineGrad.addColorStop(0.7, 'rgba(60,100,220,0.06)');
+      centerLineGrad.addColorStop(1, 'rgba(60,100,220,0)');
+    }
+    
+    // Initial sizing
+    sizeCanvas();
+    window.addEventListener('resize', sizeCanvas);
     
     // Game state + interpolation
     const ball = { x: 0.5, y: 0.5 };
@@ -1287,57 +1481,6 @@ const GAME_HTML = `<!DOCTYPE html>
     
     // Fix 3: Pause countdown interval
     let pauseCountdownInterval = null;
-    
-    // Pre-cache gradients and visual data
-    const paddleHeight = canvas.height * 0.15;
-    const paddleWidth = canvas.width * 0.02;
-    const paddleRadius = paddleWidth * 0.5;
-    const grad1 = ctx.createLinearGradient(0, 0, paddleWidth, 0);
-    grad1.addColorStop(0, '#f97316');
-    grad1.addColorStop(1, '#fbbf24');
-    const grad2 = ctx.createLinearGradient(canvas.width - paddleWidth, 0, canvas.width, 0);
-    grad2.addColorStop(0, '#8b5cf6');
-    grad2.addColorStop(1, '#7c3aed');
-
-    // Frame counter for animations
-    let frameCount = 0;
-
-    // Pre-generate star positions (once)
-    const bgStars = [];
-    for (let i = 0; i < 30; i++) {
-      bgStars.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        size: Math.random() < 0.3 ? 2 : 1,
-        alpha: 0.15 + Math.random() * 0.45
-      });
-    }
-
-    // Pre-render vignette as offscreen canvas
-    const vignetteCanvas = document.createElement('canvas');
-    vignetteCanvas.width = canvas.width;
-    vignetteCanvas.height = canvas.height;
-    const vCtx = vignetteCanvas.getContext('2d');
-    const vGrad = vCtx.createRadialGradient(
-      canvas.width * 0.5, canvas.height * 0.5, canvas.height * 0.25,
-      canvas.width * 0.5, canvas.height * 0.5, canvas.width * 0.7
-    );
-    vGrad.addColorStop(0, 'rgba(0,0,0,0)');
-    vGrad.addColorStop(1, 'rgba(0,0,0,0.4)');
-    vCtx.fillStyle = vGrad;
-    vCtx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Center line glow gradient (pre-allocated)
-    const centerLineGrad = ctx.createLinearGradient(canvas.width * 0.5 - 6, 0, canvas.width * 0.5 + 6, 0);
-    centerLineGrad.addColorStop(0, 'rgba(60,100,220,0)');
-    centerLineGrad.addColorStop(0.3, 'rgba(60,100,220,0.06)');
-    centerLineGrad.addColorStop(0.5, 'rgba(80,120,255,0.15)');
-    centerLineGrad.addColorStop(0.7, 'rgba(60,100,220,0.06)');
-    centerLineGrad.addColorStop(1, 'rgba(60,100,220,0)');
-
-    // Pre-allocated dash arrays
-    const centerDash = [10, 14];
-    const noDash = [];
     
     // WebSocket connection
     const roomId = window.location.pathname.split('/')[2];
@@ -1445,10 +1588,12 @@ const GAME_HTML = `<!DOCTYPE html>
         case 'hit':
           playSound('paddle');
           spawnHitParticles(data.side, data.y);
+          haptic(15);
           break;
           
         case 'score':
           playSound('score');
+          haptic(30);
           statusEl.style.opacity = '1';
           statusEl.textContent = \`PLAYER \${data.scorer} SCORES!\`;
           shakeScreen();
@@ -1458,6 +1603,7 @@ const GAME_HTML = `<!DOCTYPE html>
         case 'game_over':
           hidePauseOverlay();
           playSound('gameover');
+          haptic([50, 30, 50]);
           stopMusic();
           gameActive = false;
           showGameOverScreen(data);
@@ -1616,22 +1762,8 @@ const GAME_HTML = `<!DOCTYPE html>
     let localPaddleY = 0.5;
     let lastSendTime = 0;
     
-    function handleInput(e) {
-      if (!mySlot) return;
-      
-      const rect = canvas.getBoundingClientRect();
-      let clientY;
-      
-      if (e.touches) {
-        e.preventDefault();
-        clientY = e.touches[0].clientY;
-      } else {
-        clientY = e.clientY;
-      }
-      
-      const y = Math.max(0.075, Math.min(0.925, (clientY - rect.top) / rect.height));
+    function sendPaddle(y) {
       localPaddleY = y;
-      
       const now = performance.now();
       if (now - lastSendTime > 66) {
         ws.send(JSON.stringify({ type: 'paddle', y: y }));
@@ -1639,8 +1771,55 @@ const GAME_HTML = `<!DOCTYPE html>
       }
     }
     
-    canvas.addEventListener('mousemove', handleInput);
-    canvas.addEventListener('touchmove', handleInput, { passive: false });
+    // Desktop: mouse input
+    function handleMouseInput(e) {
+      if (!mySlot) return;
+      const rect = canvas.getBoundingClientRect();
+      const y = Math.max(0.075, Math.min(0.925, (e.clientY - rect.top) / rect.height));
+      sendPaddle(y);
+    }
+    canvas.addEventListener('mousemove', handleMouseInput);
+    
+    // Touch: zone-based controls (left 40% = P1, right 40% = P2)
+    function handleTouchInput(e) {
+      if (!mySlot) return;
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      
+      for (let i = 0; i < e.touches.length; i++) {
+        const touch = e.touches[i];
+        const relX = (touch.clientX - rect.left) / rect.width;
+        const relY = Math.max(0.075, Math.min(0.925, (touch.clientY - rect.top) / rect.height));
+        
+        // Left 40% = player 1 zone, right 40% = player 2 zone
+        if (relX <= 0.4 && mySlot === 1) {
+          sendPaddle(relY);
+          showTouchIndicator(touchIndicator1, touch.clientX, touch.clientY, rect);
+        } else if (relX >= 0.6 && mySlot === 2) {
+          sendPaddle(relY);
+          showTouchIndicator(touchIndicator2, touch.clientX, touch.clientY, rect);
+        }
+      }
+    }
+    
+    function showTouchIndicator(el, cx, cy, canvasRect) {
+      const wrapRect = canvas.parentElement.getBoundingClientRect();
+      el.style.display = 'block';
+      el.style.left = (cx - wrapRect.left) + 'px';
+      el.style.top = (cy - wrapRect.top) + 'px';
+    }
+    
+    function hideTouchIndicators() {
+      touchIndicator1.style.display = 'none';
+      touchIndicator2.style.display = 'none';
+    }
+    
+    if (isMobile) {
+      canvas.addEventListener('touchstart', handleTouchInput, { passive: false });
+      canvas.addEventListener('touchmove', handleTouchInput, { passive: false });
+      canvas.addEventListener('touchend', hideTouchIndicators);
+      canvas.addEventListener('touchcancel', hideTouchIndicators);
+    }
     
     startBtn.addEventListener('click', () => {
       ws.send(JSON.stringify({ type: 'start_game' }));
@@ -1650,14 +1829,14 @@ const GAME_HTML = `<!DOCTYPE html>
     // Particle system for hit effects + ball trail
     const particles = [];
     const trailParticles = [];
-    const MAX_TRAIL = 12;
+    const MAX_TRAIL = TRAIL_MAX;
     
     function spawnHitParticles(side, paddleY) {
       const cx = side === 'left' ? canvas.width * 0.03 : canvas.width * 0.97;
       const cy = paddleY * canvas.height;
       const baseColor = side === 'left' ? [249, 115, 22] : [139, 92, 246]; // orange / purple
       
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < HIT_PARTICLES; i++) {
         const angle = (side === 'left' ? 0 : Math.PI) + (Math.random() - 0.5) * 1.8;
         const speed = 1.5 + Math.random() * 3;
         particles.push({
@@ -1736,7 +1915,7 @@ const GAME_HTML = `<!DOCTYPE html>
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Draw stars
-      for (let i = 0; i < 30; i++) {
+      for (let i = 0; i < bgStars.length; i++) {
         ctx.globalAlpha = bgStars[i].alpha;
         ctx.fillStyle = '#c8d4ff';
         ctx.fillRect(bgStars[i].x, bgStars[i].y, bgStars[i].size, bgStars[i].size);
@@ -1986,7 +2165,7 @@ const GAME_HTML = `<!DOCTYPE html>
     const musicBtn = document.createElement('button');
     musicBtn.id = 'musicToggle';
     musicBtn.textContent = '🎵';
-    musicBtn.style.cssText = 'position:absolute;top:12px;right:12px;z-index:20;background:rgba(249,115,22,0.15);border:1px solid rgba(249,115,22,0.3);color:#fbbf24;font-size:1.2rem;padding:6px 10px;border-radius:6px;cursor:pointer;transition:all 0.2s;';
+    musicBtn.style.cssText = 'position:absolute;top:12px;right:12px;z-index:20;background:rgba(249,115,22,0.15);border:1px solid rgba(249,115,22,0.3);color:#fbbf24;font-size:1.2rem;padding:6px 10px;border-radius:6px;cursor:pointer;transition:all 0.2s;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;';
     musicBtn.addEventListener('click', toggleMusic);
     musicBtn.addEventListener('mouseenter', () => { musicBtn.style.background = 'rgba(249,115,22,0.3)'; });
     musicBtn.addEventListener('mouseleave', () => { musicBtn.style.background = 'rgba(249,115,22,0.15)'; });
@@ -2011,10 +2190,10 @@ const GAME_HTML = `<!DOCTYPE html>
         const resultText = iWon ? 'YOU WIN!' : 'YOU LOSE';
         const resultEmoji = iWon ? '🏆' : '💀';
         
-        overlay.innerHTML = '<div style="font-size:3rem;margin-bottom:0.5rem">' + resultEmoji + '</div>' +
-          '<div style="font-size:2.5rem;font-weight:bold;color:' + resultColor + ';margin-bottom:0.5rem;text-shadow:0 0 20px ' + resultColor + '50">' + resultText + '</div>' +
-          '<div style="font-size:1.2rem;color:#fbbf24;margin-bottom:1.5rem">' + winnerName + ' wins</div>' +
-          '<div style="font-size:3rem;font-weight:bold;color:#f5f5f5;margin-bottom:0.3rem">' + (data.score1 || 0) + ' - ' + (data.score2 || 0) + '</div>' +
+        overlay.innerHTML = '<div style="font-size:clamp(2rem,6vw,3rem);margin-bottom:0.5rem">' + resultEmoji + '</div>' +
+          '<div style="font-size:clamp(1.5rem,5vw,2.5rem);font-weight:bold;color:' + resultColor + ';margin-bottom:0.5rem;text-shadow:0 0 20px ' + resultColor + '50">' + resultText + '</div>' +
+          '<div style="font-size:clamp(0.9rem,3vw,1.2rem);color:#fbbf24;margin-bottom:1.5rem">' + winnerName + ' wins</div>' +
+          '<div style="font-size:clamp(2rem,6vw,3rem);font-weight:bold;color:#f5f5f5;margin-bottom:0.3rem">' + (data.score1 || 0) + ' - ' + (data.score2 || 0) + '</div>' +
           '<div style="display:flex;gap:3rem;margin-bottom:2rem;opacity:0.5;font-size:0.9rem">' +
             '<span>' + player1Name + '</span><span>' + player2Name + '</span>' +
           '</div>' +
@@ -2022,9 +2201,9 @@ const GAME_HTML = `<!DOCTYPE html>
       }
       
       // Action buttons
-      overlay.innerHTML += '<div style="display:flex;gap:1rem;margin-top:1rem">' +
-        '<button onclick="window.location.href=\\'/\\'" style="background:linear-gradient(135deg,#f97316,#ea580c);color:#000;border:none;padding:0.8rem 2rem;font-size:1.1rem;font-family:Courier New,monospace;font-weight:bold;cursor:pointer;box-shadow:0 0 15px rgba(249,115,22,0.4)">LOBBY</button>' +
-        '<button onclick="window.location.reload()" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;padding:0.8rem 2rem;font-size:1.1rem;font-family:Courier New,monospace;font-weight:bold;cursor:pointer;box-shadow:0 0 15px rgba(124,58,237,0.4)">PLAY AGAIN</button>' +
+      overlay.innerHTML += '<div style="display:flex;gap:1rem;margin-top:1rem;flex-wrap:wrap;justify-content:center">' +
+        '<button onclick="window.location.href=\\'/\\'" style="background:linear-gradient(135deg,#f97316,#ea580c);color:#000;border:none;padding:0.8rem 2rem;font-size:1.1rem;font-family:Courier New,monospace;font-weight:bold;cursor:pointer;box-shadow:0 0 15px rgba(249,115,22,0.4);min-height:48px">LOBBY</button>' +
+        '<button onclick="window.location.reload()" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;padding:0.8rem 2rem;font-size:1.1rem;font-family:Courier New,monospace;font-weight:bold;cursor:pointer;box-shadow:0 0 15px rgba(124,58,237,0.4);min-height:48px">PLAY AGAIN</button>' +
       '</div>';
       
       canvas.parentElement.appendChild(overlay);
