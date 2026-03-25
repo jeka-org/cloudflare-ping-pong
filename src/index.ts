@@ -2329,17 +2329,37 @@ const GAME_HTML = `<!DOCTYPE html>
     // Sound effects (Fix 20: softer, warmer sounds)
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     // Mobile browsers require user gesture to start audio
-    function resumeAudio() {
-      if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-      }
+    // iOS Safari requires audio unlock in direct user gesture call stack
+    let audioUnlocked = false;
+    function unlockAudio() {
+      if (audioUnlocked) return;
+      // Resume AudioContext
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      // Play a silent buffer to permanently unlock audio on iOS
+      const buf = audioCtx.createBuffer(1, 1, 22050);
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      src.connect(audioCtx.destination);
+      src.start(0);
+      audioUnlocked = true;
+      // Also try starting music if game is already playing
+      setTimeout(() => {
+        if (phase === 'playing' && !bgMusicPlaying && !musicMuted) {
+          try { startMusic(); } catch(e) {}
+        }
+      }, 100);
     }
-    // Resume on ANY interaction - orientation overlay, game touches, buttons, everything
-    ['touchstart', 'touchend', 'click', 'mousedown'].forEach(evt => {
+    function resumeAudio() {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+    // Attach to EVERY possible user gesture event
+    ['touchstart', 'touchend', 'click', 'mousedown', 'pointerdown'].forEach(evt => {
+      document.addEventListener(evt, unlockAudio, { capture: true });
       document.addEventListener(evt, resumeAudio, { capture: true });
     });
     
     function playSound(type, customFreq) {
+      if (audioCtx.state === 'suspended') { resumeAudio(); return; } // skip if still locked
       const t = audioCtx.currentTime;
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
