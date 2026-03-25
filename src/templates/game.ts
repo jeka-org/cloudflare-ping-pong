@@ -417,8 +417,8 @@ export const GAME_HTML = `<!DOCTYPE html>
         stars.push({
           angle: Math.random() * Math.PI * 2,
           dist: Math.random() * Math.max(sc.width, sc.height) * 0.7,
-          speed: 0.3 + Math.random() * 1.2,
-          size: 0.8 + Math.random() * 2.0,
+          speed: 0.5 + Math.random() * 1.8,
+          size: 0.4 + Math.random() * 1.0,
           color: ['#fff', '#ffeedd', '#ffcc88', '#ffd4a0', '#fff'][Math.floor(Math.random() * 5)],
           alpha: 0.2 + Math.random() * 0.7
         });
@@ -438,7 +438,7 @@ export const GAME_HTML = `<!DOCTYPE html>
           if (s.dist > maxDist) {
             s.dist = 1 + Math.random() * 20;
             s.angle = Math.random() * Math.PI * 2;
-            s.speed = 0.15 + Math.random() * 0.4;
+            s.speed = 0.3 + Math.random() * 0.8;
           }
           
           const x = centerX + Math.cos(s.angle) * s.dist;
@@ -446,7 +446,7 @@ export const GAME_HTML = `<!DOCTYPE html>
           
           // Stars grow and brighten as they get further from center
           const life = Math.min(s.dist / (maxDist * 0.5), 1);
-          const drawSize = s.size * (0.3 + life * 1.5);
+          const drawSize = s.size * (0.2 + life * 1.0);
           const drawAlpha = s.alpha * life;
           
           if (drawAlpha < 0.02) continue;
