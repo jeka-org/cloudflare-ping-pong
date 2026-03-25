@@ -29,7 +29,7 @@ AI GAMES:            playing → finished
 | waiting | expired | 10-min alarm fires, still waiting |
 | ready | countdown | Either player clicks START |
 | countdown | playing | Countdown reaches 0 |
-| playing | finished | Score reaches 5 |
+| playing | finished | Score reaches 3 |
 | playing | paused | Player disconnects (15s grace) |
 | paused | playing | Player reconnects |
 | paused | disconnected | Grace timer expires, has score |
@@ -38,7 +38,7 @@ AI GAMES:            playing → finished
 **AI games skip waiting/ready/countdown from the lobby's perspective.** They register as 'playing' immediately.
 
 ## Game-End Paths (each MUST unregister from lobby + clean D1)
-1. Normal win (score reaches 5) → status 'finished', save results + leaderboard
+1. Normal win (score reaches 3) → status 'finished', save results + leaderboard
 2. Grace timer expires, has score → status 'disconnected', save results, winner = remaining player
 3. Grace timer expires, no score → status 'abandoned', don't save results
 4. Both players disconnect → status 'abandoned', immediate end, no grace
@@ -51,9 +51,9 @@ AI GAMES:            playing → finished
 ---
 
 ## Fix 1: Win condition (CRITICAL)
-- **Change:** Game ends at first to 5 points (not 3)
-- **Code:** `game-room.ts` change `>= 3` to `>= 5`
-- **Comment:** Remove "best of 5" comment, replace with "first to 5"
+- **Change:** Game ends at Best of 5 (first to 3)
+- **Code:** `game-room.ts` keep at >= 3 (best of 5 = first to 3)
+- **Comment:** Remove "best of 5" comment, was correct all along, "best of 5 = first to 3"
 
 ## Fix 2: Lobby heartbeat (CRITICAL)
 - **Change:** GameRoom sends heartbeat to lobby every 30s
