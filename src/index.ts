@@ -1263,6 +1263,17 @@ const GAME_HTML = `<!DOCTYPE html>
         gap: 10px;
       }
     }
+    /* Landscape mobile: maximize game area, minimize chrome */
+    @media (max-height: 500px) and (orientation: landscape) {
+      .player-names { display: none; }
+      .home-link { font-size: 0.65rem; padding: 4px 8px; top: 4px; left: 4px; min-height: 32px; }
+      #musicToggle { font-size: 0.9rem; padding: 4px 6px; min-width: 32px; min-height: 32px; }
+      .game-wrap { padding: 5px; }
+      body { padding: 0; }
+      #emojiBar { bottom: 2px; }
+      #emojiBar button { font-size: 1.2rem; min-width: 32px; min-height: 32px; padding: 4px; }
+      #spectatorBadge { font-size: 0.6rem; padding: 2px 8px; top: 4px; left: 50px; }
+    }
   </style>
 </head>
 <body>
@@ -1448,11 +1459,19 @@ const GAME_HTML = `<!DOCTYPE html>
     // Responsive canvas sizing
     function sizeCanvas() {
       const maxW = 800;
-      const availW = Math.min(maxW, window.innerWidth - 40);
-      const w = Math.round(availW);
-      const h = Math.round(w * 0.75); // 4:3
-      canvas.width = w;
-      canvas.height = h;
+      const padX = isMobile ? 80 : 40; // extra side padding on mobile for finger space
+      const padY = isMobile ? 60 : 20; // top/bottom padding for UI elements
+      const availW = Math.min(maxW, window.innerWidth - padX);
+      const availH = window.innerHeight - padY;
+      // Fit 4:3 ratio within available space (constrained by both width AND height)
+      let w = availW;
+      let h = Math.round(w * 0.75);
+      if (h > availH) {
+        h = availH;
+        w = Math.round(h / 0.75);
+      }
+      canvas.width = Math.round(w);
+      canvas.height = Math.round(h);
       rebuildVisualCache();
     }
     
@@ -1851,14 +1870,15 @@ const GAME_HTML = `<!DOCTYPE html>
       
       for (let i = 0; i < e.touches.length; i++) {
         const touch = e.touches[i];
-        const relX = (touch.clientX - rect.left) / rect.width;
+        // Use screen-relative position: left half of screen = P1, right half = P2
+        const screenX = touch.clientX / window.innerWidth;
         const relY = Math.max(0.075, Math.min(0.925, (touch.clientY - rect.top) / rect.height));
         
-        // Left 40% = player 1 zone, right 40% = player 2 zone
-        if (relX <= 0.4 && mySlot === 1) {
+        // Left half of screen = player 1, right half = player 2
+        if (screenX <= 0.5 && mySlot === 1) {
           sendPaddle(relY);
           showTouchIndicator(touchIndicator1, touch.clientX, touch.clientY, rect);
-        } else if (relX >= 0.6 && mySlot === 2) {
+        } else if (screenX >= 0.5 && mySlot === 2) {
           sendPaddle(relY);
           showTouchIndicator(touchIndicator2, touch.clientX, touch.clientY, rect);
         }
@@ -1878,10 +1898,11 @@ const GAME_HTML = `<!DOCTYPE html>
     }
     
     if (isMobile) {
-      canvas.addEventListener('touchstart', handleTouchInput, { passive: false });
-      canvas.addEventListener('touchmove', handleTouchInput, { passive: false });
-      canvas.addEventListener('touchend', hideTouchIndicators);
-      canvas.addEventListener('touchcancel', hideTouchIndicators);
+      // Listen on document so touches OUTSIDE canvas (side areas) still control paddle
+      document.addEventListener('touchstart', handleTouchInput, { passive: false });
+      document.addEventListener('touchmove', handleTouchInput, { passive: false });
+      document.addEventListener('touchend', hideTouchIndicators);
+      document.addEventListener('touchcancel', hideTouchIndicators);
     }
     
     startBtn.addEventListener('click', () => {
