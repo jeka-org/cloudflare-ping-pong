@@ -1465,6 +1465,11 @@ const GAME_HTML = `<!DOCTYPE html>
       btn.addEventListener('click', () => {
         dismissed = true;
         overlay.style.display = 'none';
+        // Resume audio + start music if game is already playing
+        resumeAudio();
+        if (phase === 'playing' && !bgMusicPlaying && !musicMuted) {
+          try { startMusic(); } catch(e) {}
+        }
       });
       
       function checkOrientation() {
@@ -2324,15 +2329,15 @@ const GAME_HTML = `<!DOCTYPE html>
     // Sound effects (Fix 20: softer, warmer sounds)
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     // Mobile browsers require user gesture to start audio
-    let audioResumed = false;
     function resumeAudio() {
-      if (!audioResumed && audioCtx.state === 'suspended') {
+      if (audioCtx.state === 'suspended') {
         audioCtx.resume();
-        audioResumed = true;
       }
     }
-    document.addEventListener('touchstart', resumeAudio);
-    document.addEventListener('click', resumeAudio);
+    // Resume on ANY interaction - orientation overlay, game touches, buttons, everything
+    ['touchstart', 'touchend', 'click', 'mousedown'].forEach(evt => {
+      document.addEventListener(evt, resumeAudio, { capture: true });
+    });
     
     function playSound(type, customFreq) {
       const t = audioCtx.currentTime;
@@ -2417,7 +2422,7 @@ const GAME_HTML = `<!DOCTYPE html>
         if (!bgMusic) return;
         const dur = bgMusic.duration;
         const cur = bgMusic.currentTime;
-        const targetVol = musicMuted ? 0 : (isMobile ? 0.05 : 0.08);
+        const targetVol = musicMuted ? 0 : (isMobile ? 0.03 : 0.08);
         if (cur < 0.5) {
           bgMusic.volume = targetVol * (cur / 0.5); // fade in
         } else if (dur - cur < 0.8) {
