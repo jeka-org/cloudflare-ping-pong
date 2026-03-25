@@ -1617,11 +1617,12 @@ export const GAME_HTML = `<!DOCTYPE html>
         overlay.innerHTML = '<div style="font-size:1.5rem;color:#fbbf24;margin-bottom:1rem">GAME ENDED</div>' +
           '<div style="opacity:0.5;margin-bottom:2rem">No contest</div>';
       } else {
-        const iWon = (mySlot === data.winner);
+        const isSpectator = !mySlot;
+        const iWon = !isSpectator && (mySlot === data.winner);
         const winnerName = data.winner === 1 ? player1Name : player2Name;
-        const resultColor = iWon ? '#22c55e' : '#ef4444';
-        const resultText = iWon ? 'YOU WIN!' : 'YOU LOSE';
-        const resultEmoji = iWon ? '🏆' : '💀';
+        const resultColor = isSpectator ? '#fbbf24' : (iWon ? '#22c55e' : '#ef4444');
+        const resultText = isSpectator ? 'GAME OVER' : (iWon ? 'YOU WIN!' : 'YOU LOSE');
+        const resultEmoji = isSpectator ? '🏓' : (iWon ? '🏆' : '💀');
         
         overlay.innerHTML = '<div style="font-size:clamp(2rem,6vw,3rem);margin-bottom:0.5rem">' + resultEmoji + '</div>' +
           '<div style="font-size:clamp(1.5rem,5vw,2.5rem);font-weight:bold;color:' + resultColor + ';margin-bottom:0.5rem;text-shadow:0 0 20px ' + resultColor + '50">' + resultText + '</div>' +
