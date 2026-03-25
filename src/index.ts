@@ -946,71 +946,13 @@ const GAME_HTML = `<!DOCTYPE html>
       touch-action: none;
       -webkit-overflow-scrolling: none;
     }
-    /* CSS starfield warp layers - 3 parallax depths */
-    body::before, body::after {
-      content: '';
+    /* Starfield warp: canvas-based, rendered by JS below */
+    #starfieldCanvas {
       position: fixed;
       top: 0; left: 0;
       width: 100%; height: 100%;
       pointer-events: none;
       z-index: 0;
-    }
-    /* Layer 1: Slow distant stars (warm white + pale gold) */
-    body::before {
-      background: transparent;
-      box-shadow:
-        50vw 50vh 0 0 rgba(255,238,221,0.0),
-        12vw 8vh 0 0.5px rgba(255,255,255,0.5), 78vw 15vh 0 0.5px rgba(255,238,221,0.4),
-        35vw 82vh 0 0.5px rgba(255,255,255,0.3), 62vw 45vh 0 0.5px rgba(255,238,221,0.5),
-        91vw 72vh 0 0.5px rgba(255,255,255,0.4), 25vw 33vh 0 0.5px rgba(255,204,136,0.3),
-        48vw 91vh 0 0.5px rgba(255,238,221,0.4), 83vw 58vh 0 0.5px rgba(255,255,255,0.5),
-        7vw 67vh 0 0.5px rgba(255,204,136,0.3), 55vw 22vh 0 0.5px rgba(255,238,221,0.4),
-        70vw 88vh 0 0.5px rgba(255,255,255,0.3), 15vw 50vh 0 0.5px rgba(255,238,221,0.5),
-        42vw 12vh 0 0.5px rgba(255,204,136,0.3), 88vw 38vh 0 0.5px rgba(255,255,255,0.4);
-      animation: warp-slow 90s linear infinite;
-    }
-    /* Layer 2: Medium speed stars */
-    body::after {
-      background: transparent;
-      box-shadow:
-        50vw 50vh 0 0 rgba(255,238,221,0.0),
-        20vw 25vh 0 1px rgba(255,238,221,0.4), 72vw 68vh 0 1px rgba(255,255,255,0.5),
-        45vw 15vh 0 1px rgba(255,204,136,0.3), 85vw 82vh 0 1px rgba(255,238,221,0.4),
-        30vw 55vh 0 1px rgba(255,255,255,0.3), 60vw 35vh 0 1px rgba(255,204,136,0.4),
-        10vw 78vh 0 1px rgba(255,238,221,0.5), 52vw 42vh 0 1px rgba(255,255,255,0.3),
-        38vw 90vh 0 1px rgba(255,204,136,0.3), 75vw 20vh 0 1px rgba(255,238,221,0.4);
-      animation: warp-med 60s linear infinite;
-    }
-    /* Layer 3: Fast close stars (extra div) */
-    .starfield-fast {
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      pointer-events: none;
-      z-index: 0;
-      box-shadow:
-        50vw 50vh 0 0 rgba(255,238,221,0.0),
-        18vw 30vh 0 1.5px rgba(255,238,221,0.3), 65vw 75vh 0 1.5px rgba(255,255,255,0.4),
-        40vw 10vh 0 1.5px rgba(255,204,136,0.3), 80vw 60vh 0 1.5px rgba(255,238,221,0.35),
-        28vw 85vh 0 1.5px rgba(255,255,255,0.3), 55vw 50vh 0 1.5px rgba(255,204,136,0.25),
-        90vw 20vh 0 1.5px rgba(255,238,221,0.4), 8vw 45vh 0 1.5px rgba(255,255,255,0.3);
-      animation: warp-fast 40s linear infinite;
-    }
-    @keyframes warp-slow {
-      0% { transform: scale(0.95) rotate(0deg); opacity: 0.6; }
-      50% { transform: scale(1.05) rotate(0.5deg); opacity: 0.9; }
-      100% { transform: scale(0.95) rotate(0deg); opacity: 0.6; }
-    }
-    @keyframes warp-med {
-      0% { transform: scale(0.9) translate(0,0); opacity: 0.5; }
-      33% { transform: scale(1.08) translate(5px, 3px); opacity: 0.8; }
-      66% { transform: scale(1.02) translate(-3px, -2px); opacity: 0.6; }
-      100% { transform: scale(0.9) translate(0,0); opacity: 0.5; }
-    }
-    @keyframes warp-fast {
-      0% { transform: scale(0.85); opacity: 0.3; }
-      50% { transform: scale(1.15); opacity: 0.7; }
-      100% { transform: scale(0.85); opacity: 0.3; }
     }
     .game-wrap {
       position: relative;
@@ -1324,7 +1266,7 @@ const GAME_HTML = `<!DOCTYPE html>
   </style>
 </head>
 <body>
-  <div class="starfield-fast"></div>
+  <canvas id="starfieldCanvas"></canvas>
   <!-- Orientation overlay for mobile portrait -->
   <div id="orientationOverlay">
     <div class="rotate-icon">📱</div>
@@ -1365,6 +1307,85 @@ const GAME_HTML = `<!DOCTYPE html>
   </div>
 
   <script>
+    // Starfield warp effect (runs on separate canvas behind the game)
+    (function initStarfield() {
+      const sc = document.getElementById('starfieldCanvas');
+      const sctx = sc.getContext('2d');
+      const STAR_COUNT = 150;
+      const stars = [];
+      const cx = () => sc.width / 2;
+      const cy = () => sc.height / 2;
+      
+      function resizeStarfield() {
+        sc.width = window.innerWidth;
+        sc.height = window.innerHeight;
+      }
+      resizeStarfield();
+      window.addEventListener('resize', resizeStarfield);
+      
+      // Init stars at random positions radiating from center
+      for (let i = 0; i < STAR_COUNT; i++) {
+        stars.push({
+          angle: Math.random() * Math.PI * 2,
+          dist: Math.random() * Math.max(sc.width, sc.height) * 0.7,
+          speed: 0.3 + Math.random() * 1.2,
+          size: 0.8 + Math.random() * 2.0,
+          color: ['#fff', '#ffeedd', '#ffcc88', '#ffd4a0', '#fff'][Math.floor(Math.random() * 5)],
+          alpha: 0.2 + Math.random() * 0.7
+        });
+      }
+      
+      function tickStarfield() {
+        sctx.clearRect(0, 0, sc.width, sc.height);
+        const centerX = cx();
+        const centerY = cy();
+        const maxDist = Math.max(sc.width, sc.height) * 0.8;
+        
+        for (let i = 0; i < stars.length; i++) {
+          const s = stars[i];
+          s.dist += s.speed * (1 + s.dist * 0.002); // accelerate outward
+          
+          // Reset when star goes off screen
+          if (s.dist > maxDist) {
+            s.dist = 1 + Math.random() * 20;
+            s.angle = Math.random() * Math.PI * 2;
+            s.speed = 0.15 + Math.random() * 0.4;
+          }
+          
+          const x = centerX + Math.cos(s.angle) * s.dist;
+          const y = centerY + Math.sin(s.angle) * s.dist;
+          
+          // Stars grow and brighten as they get further from center
+          const life = Math.min(s.dist / (maxDist * 0.5), 1);
+          const drawSize = s.size * (0.3 + life * 1.5);
+          const drawAlpha = s.alpha * life;
+          
+          if (drawAlpha < 0.02) continue;
+          
+          sctx.globalAlpha = drawAlpha;
+          sctx.fillStyle = s.color;
+          sctx.beginPath();
+          sctx.arc(x, y, drawSize, 0, Math.PI * 2);
+          sctx.fill();
+          
+          // Draw a streak for faster/closer stars (warp lines)
+          if (life > 0.3 && s.speed > 0.5) {
+            const streakLen = s.speed * life * 15;
+            sctx.globalAlpha = drawAlpha * 0.5;
+            sctx.beginPath();
+            sctx.moveTo(x, y);
+            sctx.lineTo(x - Math.cos(s.angle) * streakLen, y - Math.sin(s.angle) * streakLen);
+            sctx.strokeStyle = s.color;
+            sctx.lineWidth = drawSize * 0.5;
+            sctx.stroke();
+          }
+        }
+        sctx.globalAlpha = 1;
+        requestAnimationFrame(tickStarfield);
+      }
+      requestAnimationFrame(tickStarfield);
+    })();
+    
     // Fix 19: Embedded chiptune loop (Arcade Puzzler by Eric Matyas, soundimage.org, royalty-free with attribution)
     // Fix 19: Multiple chiptune tracks (Eric Matyas, soundimage.org, royalty-free with attribution)
     const MUSIC_TRACKS = [
