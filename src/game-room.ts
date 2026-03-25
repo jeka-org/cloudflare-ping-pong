@@ -344,6 +344,21 @@ export class GameRoom extends DurableObject<Env> {
           }
           break;
           
+        case 'switch_to_ai':
+          // Player 1 is waiting and wants to play AI instead
+          if (player.slot === 1 && this.gameState.phase === 'waiting') {
+            this.aiEnabled = true;
+            this.aiDifficulty = 0.5;
+            this.send(ws, {
+              type: 'ai_opponent',
+              difficulty: this.aiDifficulty,
+              aiName: 'AI 🤖',
+            });
+            this.notifyLobbyRegisterAsPlaying();
+            this.startCountdown();
+          }
+          break;
+          
         case 'ping':
           this.send(ws, { type: 'pong', timestamp: data.timestamp });
           break;

@@ -1341,12 +1341,29 @@ const GAME_HTML = `<!DOCTYPE html>
         case 'waiting':
           statusEl.style.opacity = '1';
           statusEl.textContent = data.message;
+          // Show "play vs AI" option after 5 seconds of waiting
+          if (!document.getElementById('waitingAiBtn')) {
+            setTimeout(() => {
+              if (phase !== 'waiting') return;
+              const aiOffer = document.createElement('div');
+              aiOffer.id = 'waitingAiBtn';
+              aiOffer.style.cssText = 'position:absolute;top:60%;left:50%;transform:translateX(-50%);z-index:15;text-align:center;';
+              aiOffer.innerHTML = '<div style="opacity:0.5;font-size:0.9rem;margin-bottom:0.8rem">Tired of waiting?</div>' +
+                '<button style="background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;padding:0.7rem 2rem;font-size:1rem;font-family:Courier New,monospace;font-weight:bold;cursor:pointer;box-shadow:0 0 15px rgba(124,58,237,0.4)">Play vs AI instead 🤖</button>';
+              aiOffer.querySelector('button').addEventListener('click', () => {
+                ws.send(JSON.stringify({ type: 'switch_to_ai' }));
+                aiOffer.remove();
+              });
+              canvas.parentElement.appendChild(aiOffer);
+            }, 5000);
+          }
           break;
           
         case 'ready':
           statusEl.style.opacity = '1';
           statusEl.textContent = 'READY!';
           startBtn.style.display = 'block';
+          { const aiBtn = document.getElementById('waitingAiBtn'); if (aiBtn) aiBtn.remove(); }
           if (data.player1Name) { player1Name = data.player1Name; document.getElementById('p1name').textContent = player1Name; }
           if (data.player2Name) { player2Name = data.player2Name; document.getElementById('p2name').textContent = player2Name; }
           break;
@@ -1355,6 +1372,7 @@ const GAME_HTML = `<!DOCTYPE html>
           statusEl.textContent = 'VS AI 🤖';
           player2Name = 'AI 🤖';
           document.getElementById('p2name').textContent = player2Name;
+          { const aiBtn = document.getElementById('waitingAiBtn'); if (aiBtn) aiBtn.remove(); }
           break;
           
         case 'state':
