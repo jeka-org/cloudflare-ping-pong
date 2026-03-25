@@ -261,9 +261,17 @@ export async function getGlobalStats(db: D1Database): Promise<{
  * Fix 11: Clean stale waiting rooms from D1 (15-minute threshold)
  */
 export async function cleanStaleRooms(db: D1Database): Promise<void> {
+  // Expire waiting rooms after 15 minutes
+  // Use strftime to normalize ISO timestamps with T/Z for comparison
   await db
     .prepare(
-      `UPDATE rooms SET status = 'expired' WHERE status = 'waiting' AND created_at < datetime('now', '-15 minutes')`
+      `UPDATE rooms SET status = 'expired' WHERE status = 'waiting' AND strftime('%s', created_at) < strftime('%s', 'now', '-15 minutes')`
+    )
+    .run();
+  // Expire playing/ready rooms after 30 minutes (no game lasts that long)
+  await db
+    .prepare(
+      `UPDATE rooms SET status = 'expired' WHERE status IN ('playing', 'ready') AND strftime('%s', created_at) < strftime('%s', 'now', '-30 minutes')`
     )
     .run();
 }

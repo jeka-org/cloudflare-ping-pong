@@ -643,12 +643,22 @@ export class GameRoom extends DurableObject<Env> {
     this.notifyLobbyUnregister();
     
     // Log analytics
-    this.logEvent('game_over', null, null, {
+    const players = Array.from(this.players.values());
+    const winnerSlotForLog = reason === 'completed'
+      ? (this.gameState.score1 >= 3 ? 1 : 2)
+      : (reason === 'disconnected' && disconnectedPlayerSlot ? (disconnectedPlayerSlot === 1 ? 2 : 1) : null);
+    
+    this.logEvent('game_over', winnerSlotForLog, null, {
       reason,
       score1: this.gameState.score1,
       score2: this.gameState.score2,
       rallies: this.rallies.length,
       duration_seconds: duration,
+      winner_name: winnerSlotForLog === 1
+        ? (players.find(p => p.slot === 1)?.name || (this.disconnectedSlotName && this.disconnectedSlot === 1 ? this.disconnectedSlotName : 'Player 1'))
+        : winnerSlotForLog === 2
+        ? (this.aiEnabled ? 'AI 🤖' : (players.find(p => p.slot === 2)?.name || (this.disconnectedSlotName && this.disconnectedSlot === 2 ? this.disconnectedSlotName : 'Player 2')))
+        : null,
     });
     
     // Set alarm to clean up room data in 30 minutes
@@ -923,23 +933,12 @@ export class GameRoom extends DurableObject<Env> {
       }
     }
     
-    // Rally heat speed multiplier: apply after paddle collisions have already set speed
-    const rallyHeat = this.getRallyHeat();
-    if (rallyHeat > 0) {
-      const speedMultiplier = 1 + rallyHeat * 0.1;
-      const currentSpeed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
-      const maxForHeat = MAX_BALL_SPEED * speedMultiplier;
-      // Boost ball speed to heat cap if below it
-      if (currentSpeed > 0 && currentSpeed < maxForHeat) {
-        const boost = maxForHeat / currentSpeed;
-        ball.vx *= boost;
-        ball.vy *= boost;
-      }
-    }
+    // Rally heat: visual effects only, no speed boost
+    // (speed ramp is handled by SPEED_INCREASE_FACTOR per hit, capped at MAX_BALL_SPEED)
     
-    // ABSOLUTE speed clamp after ALL modifiers
+    // ABSOLUTE speed clamp after ALL modifiers (events like gravity well can still push speed)
     const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
-    const absoluteMax = MAX_BALL_SPEED * 1.5;
+    const absoluteMax = MAX_BALL_SPEED;
     if (speed > absoluteMax) {
       const scale = absoluteMax / speed;
       ball.vx *= scale;

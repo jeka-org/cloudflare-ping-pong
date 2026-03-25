@@ -239,14 +239,13 @@ AI games skip waiting/ready and register directly as 'playing'.
 | `/api/analytics` | GET | Postgres analytics (activity, cities, top games) |
 | `/api/events/live` | GET | Recent events from Postgres |
 | `/api/event` | POST | Log analytics event (called by GameRoom DO) |
-| `/analytics` | GET | Standalone analytics dashboard page |
 
 ---
 
 ## Testing
 
 ```bash
-npx vitest              # 44 tests across 6 files
+npx vitest              # 58 tests across 7 files
 npx vitest --watch      # watch mode
 ```
 
@@ -255,6 +254,7 @@ Test coverage:
 - **Room names** (3 tests): name generation format
 - **D1 queries** (8 tests): room CRUD, stats, leaderboard, stale cleanup
 - **Worker routes** (13 tests): homepage, game page, room existence check, API endpoints, lobby
+- **Game logic** (14 tests): game state, scoring, win conditions
 - **Lobby DO** (1 test): basic functionality
 - **Analytics** (6 tests): query builder output
 
@@ -268,20 +268,28 @@ pong/
 +-- vitest.config.ts         # Test config with Cloudflare Workers pool
 +-- FIXES-SPEC.md            # Validated fix spec (18 fixes with state machine)
 +-- src/
-|   +-- index.ts             # Worker: routes, API, inline HTML (homepage + game + analytics)
+|   +-- index.ts             # Worker: routes, API handlers (~270 lines)
 |   +-- game-room.ts         # DO: WebSocket, physics, AI, reconnection, lobby notifications
 |   +-- lobby-room.ts        # DO: room registry, WebSocket broadcast, staleness pruning
 |   +-- physics.ts           # Ball/paddle physics engine (pure functions)
 |   +-- room-names.ts        # Room name + player name generator
 |   +-- d1-queries.ts        # D1: room CRUD, game results, leaderboard, stale cleanup
 |   +-- analytics.ts         # Hyperdrive: Postgres analytics query builders
+|   +-- templates/
+|       +-- home.ts          # Homepage HTML/CSS/JS (lobby, dashboard, recent games)
+|       +-- game.ts          # Game page HTML/CSS/JS (canvas, audio, WebSocket client)
+|       +-- error.ts         # Error page for expired/ended rooms
 +-- tests/
 |   +-- physics.test.ts
 |   +-- room-names.test.ts
 |   +-- d1-queries.test.ts
 |   +-- worker.test.ts
+|   +-- game-logic.test.ts
 |   +-- lobby-room.test.ts
 |   +-- analytics.test.ts
+|   +-- check-html-js.mjs    # Validates JS syntax in HTML template strings
++-- scripts/
+|   +-- extract-templates.mjs # Tool to extract templates from index.ts
 +-- schema/
     +-- d1-schema.sql
     +-- postgres-schema.sql
