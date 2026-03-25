@@ -946,48 +946,71 @@ const GAME_HTML = `<!DOCTYPE html>
       touch-action: none;
       -webkit-overflow-scrolling: none;
     }
-    /* CSS starfield layers */
+    /* CSS starfield warp layers - 3 parallax depths */
     body::before, body::after {
       content: '';
       position: fixed;
       top: 0; left: 0;
-      width: 200%; height: 200%;
+      width: 100%; height: 100%;
       pointer-events: none;
       z-index: 0;
     }
+    /* Layer 1: Slow distant stars (warm white + pale gold) */
     body::before {
       background: transparent;
       box-shadow:
-        12px 45px 0 0 rgba(255,255,255,0.7), 89px 120px 0 0 rgba(255,255,255,0.5),
-        200px 30px 0 0 rgba(255,255,255,0.6), 340px 180px 0 0 rgba(255,255,255,0.4),
-        450px 90px 0 0 rgba(255,255,255,0.8), 120px 300px 0 0 rgba(255,255,255,0.3),
-        560px 250px 0 0 rgba(255,255,255,0.6), 700px 60px 0 0 rgba(255,255,255,0.5),
-        280px 400px 0 0 rgba(255,255,255,0.7), 820px 320px 0 0 rgba(255,255,255,0.4),
-        50px 500px 0 0 rgba(255,255,255,0.5), 600px 450px 0 0 rgba(255,255,255,0.6),
-        750px 150px 0 0 rgba(255,255,255,0.3), 900px 400px 0 0 rgba(255,255,255,0.7),
-        180px 220px 0 0 rgba(255,255,255,0.5), 430px 350px 0 0 rgba(255,255,255,0.4),
-        1000px 100px 0 0 rgba(255,255,255,0.6), 1100px 280px 0 0 rgba(255,255,255,0.5),
-        350px 550px 0 0 rgba(255,255,255,0.3), 950px 500px 0 0 rgba(255,255,255,0.6);
-      animation: star-drift-1 80s linear infinite;
+        50vw 50vh 0 0 rgba(255,238,221,0.0),
+        12vw 8vh 0 0.5px rgba(255,255,255,0.5), 78vw 15vh 0 0.5px rgba(255,238,221,0.4),
+        35vw 82vh 0 0.5px rgba(255,255,255,0.3), 62vw 45vh 0 0.5px rgba(255,238,221,0.5),
+        91vw 72vh 0 0.5px rgba(255,255,255,0.4), 25vw 33vh 0 0.5px rgba(255,204,136,0.3),
+        48vw 91vh 0 0.5px rgba(255,238,221,0.4), 83vw 58vh 0 0.5px rgba(255,255,255,0.5),
+        7vw 67vh 0 0.5px rgba(255,204,136,0.3), 55vw 22vh 0 0.5px rgba(255,238,221,0.4),
+        70vw 88vh 0 0.5px rgba(255,255,255,0.3), 15vw 50vh 0 0.5px rgba(255,238,221,0.5),
+        42vw 12vh 0 0.5px rgba(255,204,136,0.3), 88vw 38vh 0 0.5px rgba(255,255,255,0.4);
+      animation: warp-slow 90s linear infinite;
     }
+    /* Layer 2: Medium speed stars */
     body::after {
       background: transparent;
       box-shadow:
-        30px 80px 0 1px rgba(200,210,255,0.5), 150px 200px 0 1px rgba(200,210,255,0.3),
-        400px 50px 0 1px rgba(200,210,255,0.4), 600px 300px 0 1px rgba(200,210,255,0.6),
-        250px 450px 0 1px rgba(200,210,255,0.3), 800px 180px 0 1px rgba(200,210,255,0.5),
-        500px 500px 0 1px rgba(200,210,255,0.4), 100px 350px 0 1px rgba(200,210,255,0.3),
-        700px 420px 0 1px rgba(200,210,255,0.5), 950px 80px 0 1px rgba(200,210,255,0.4),
-        1050px 350px 0 1px rgba(200,210,255,0.3), 450px 150px 0 1px rgba(200,210,255,0.5);
-      animation: star-drift-2 120s linear infinite;
+        50vw 50vh 0 0 rgba(255,238,221,0.0),
+        20vw 25vh 0 1px rgba(255,238,221,0.4), 72vw 68vh 0 1px rgba(255,255,255,0.5),
+        45vw 15vh 0 1px rgba(255,204,136,0.3), 85vw 82vh 0 1px rgba(255,238,221,0.4),
+        30vw 55vh 0 1px rgba(255,255,255,0.3), 60vw 35vh 0 1px rgba(255,204,136,0.4),
+        10vw 78vh 0 1px rgba(255,238,221,0.5), 52vw 42vh 0 1px rgba(255,255,255,0.3),
+        38vw 90vh 0 1px rgba(255,204,136,0.3), 75vw 20vh 0 1px rgba(255,238,221,0.4);
+      animation: warp-med 60s linear infinite;
     }
-    @keyframes star-drift-1 {
-      from { transform: translate(0, 0); }
-      to { transform: translate(-40px, -20px); }
+    /* Layer 3: Fast close stars (extra div) */
+    .starfield-fast {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 0;
+      box-shadow:
+        50vw 50vh 0 0 rgba(255,238,221,0.0),
+        18vw 30vh 0 1.5px rgba(255,238,221,0.3), 65vw 75vh 0 1.5px rgba(255,255,255,0.4),
+        40vw 10vh 0 1.5px rgba(255,204,136,0.3), 80vw 60vh 0 1.5px rgba(255,238,221,0.35),
+        28vw 85vh 0 1.5px rgba(255,255,255,0.3), 55vw 50vh 0 1.5px rgba(255,204,136,0.25),
+        90vw 20vh 0 1.5px rgba(255,238,221,0.4), 8vw 45vh 0 1.5px rgba(255,255,255,0.3);
+      animation: warp-fast 40s linear infinite;
     }
-    @keyframes star-drift-2 {
-      from { transform: translate(0, 0); }
-      to { transform: translate(25px, -15px); }
+    @keyframes warp-slow {
+      0% { transform: scale(0.95) rotate(0deg); opacity: 0.6; }
+      50% { transform: scale(1.05) rotate(0.5deg); opacity: 0.9; }
+      100% { transform: scale(0.95) rotate(0deg); opacity: 0.6; }
+    }
+    @keyframes warp-med {
+      0% { transform: scale(0.9) translate(0,0); opacity: 0.5; }
+      33% { transform: scale(1.08) translate(5px, 3px); opacity: 0.8; }
+      66% { transform: scale(1.02) translate(-3px, -2px); opacity: 0.6; }
+      100% { transform: scale(0.9) translate(0,0); opacity: 0.5; }
+    }
+    @keyframes warp-fast {
+      0% { transform: scale(0.85); opacity: 0.3; }
+      50% { transform: scale(1.15); opacity: 0.7; }
+      100% { transform: scale(0.85); opacity: 0.3; }
     }
     .game-wrap {
       position: relative;
@@ -1005,9 +1028,9 @@ const GAME_HTML = `<!DOCTYPE html>
       width: 110%;
       height: 110%;
       background: radial-gradient(ellipse at center,
-        rgba(100,60,180,0.10) 0%,
-        rgba(60,80,200,0.06) 30%,
-        rgba(80,40,160,0.03) 50%,
+        rgba(249,115,22,0.08) 0%,
+        rgba(251,191,36,0.04) 30%,
+        rgba(249,115,22,0.02) 50%,
         transparent 70%
       );
       pointer-events: none;
@@ -1019,14 +1042,23 @@ const GAME_HTML = `<!DOCTYPE html>
       to { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
     }
     #gameCanvas {
-      border: 2px solid rgba(100,80,200,0.6);
-      box-shadow: 0 0 20px rgba(100,80,200,0.3), 0 0 40px rgba(80,60,180,0.15), inset 0 0 60px rgba(60,40,160,0.05);
+      border: 2px solid rgba(249, 115, 22, 0.6);
+      box-shadow:
+        0 0 15px rgba(249, 115, 22, 0.4),
+        0 0 30px rgba(251, 191, 36, 0.2),
+        0 0 60px rgba(249, 115, 22, 0.1),
+        inset 0 0 30px rgba(249, 115, 22, 0.05);
       background: #080810;
       position: relative;
       z-index: 1;
       max-width: 100%;
       height: auto;
       touch-action: none;
+      animation: ember-pulse 3.5s ease-in-out infinite alternate;
+    }
+    @keyframes ember-pulse {
+      from { box-shadow: 0 0 15px rgba(249,115,22,0.4), 0 0 30px rgba(251,191,36,0.2), 0 0 60px rgba(249,115,22,0.1), inset 0 0 30px rgba(249,115,22,0.05); }
+      to { box-shadow: 0 0 18px rgba(249,115,22,0.5), 0 0 35px rgba(251,191,36,0.25), 0 0 70px rgba(249,115,22,0.15), inset 0 0 35px rgba(249,115,22,0.07); }
     }
     #status {
       position: absolute;
@@ -1081,7 +1113,7 @@ const GAME_HTML = `<!DOCTYPE html>
       letter-spacing: 0.05em;
     }
     .p1-name { color: #f97316; text-shadow: 0 0 8px rgba(249,115,22,0.4); }
-    .p2-name { color: #8b5cf6; text-shadow: 0 0 8px rgba(139,92,246,0.4); }
+    .p2-name { color: #c026d3; text-shadow: 0 0 8px rgba(192,38,211,0.4); }
     .home-link {
       position: absolute;
       top: 12px;
@@ -1104,7 +1136,7 @@ const GAME_HTML = `<!DOCTYPE html>
       position: absolute;
       top: 12px;
       left: 80px;
-      background: rgba(139,92,246,0.7);
+      background: rgba(192,38,211,0.7);
       color: white;
       padding: 4px 12px;
       border-radius: 4px;
@@ -1292,6 +1324,7 @@ const GAME_HTML = `<!DOCTYPE html>
   </style>
 </head>
 <body>
+  <div class="starfield-fast"></div>
   <!-- Orientation overlay for mobile portrait -->
   <div id="orientationOverlay">
     <div class="rotate-icon">📱</div>
@@ -1420,8 +1453,8 @@ const GAME_HTML = `<!DOCTYPE html>
       grad1.addColorStop(0, '#f97316');
       grad1.addColorStop(1, '#fbbf24');
       grad2 = ctx.createLinearGradient(canvas.width - paddleWidth, 0, canvas.width, 0);
-      grad2.addColorStop(0, '#8b5cf6');
-      grad2.addColorStop(1, '#7c3aed');
+      grad2.addColorStop(0, '#c026d3');
+      grad2.addColorStop(1, '#a855f7');
       
       // Regenerate stars
       bgStars = [];
@@ -1448,13 +1481,13 @@ const GAME_HTML = `<!DOCTYPE html>
       vCtx.fillStyle = vGrad;
       vCtx.fillRect(0, 0, canvas.width, canvas.height);
       
-      // Rebuild center line gradient
+      // Rebuild center line gradient (warm orange)
       centerLineGrad = ctx.createLinearGradient(canvas.width * 0.5 - 6, 0, canvas.width * 0.5 + 6, 0);
-      centerLineGrad.addColorStop(0, 'rgba(60,100,220,0)');
-      centerLineGrad.addColorStop(0.3, 'rgba(60,100,220,0.06)');
-      centerLineGrad.addColorStop(0.5, 'rgba(80,120,255,0.15)');
-      centerLineGrad.addColorStop(0.7, 'rgba(60,100,220,0.06)');
-      centerLineGrad.addColorStop(1, 'rgba(60,100,220,0)');
+      centerLineGrad.addColorStop(0, 'rgba(249,115,22,0)');
+      centerLineGrad.addColorStop(0.3, 'rgba(249,115,22,0.04)');
+      centerLineGrad.addColorStop(0.5, 'rgba(251,191,36,0.12)');
+      centerLineGrad.addColorStop(0.7, 'rgba(249,115,22,0.04)');
+      centerLineGrad.addColorStop(1, 'rgba(249,115,22,0)');
     }
     
     // Initial sizing
@@ -1588,6 +1621,8 @@ const GAME_HTML = `<!DOCTYPE html>
         case 'hit':
           playSound('paddle');
           spawnHitParticles(data.side, data.y);
+          if (data.side === 'left') paddleFlashL = 4;
+          else paddleFlashR = 4;
           haptic(15);
           break;
           
@@ -1826,6 +1861,12 @@ const GAME_HTML = `<!DOCTYPE html>
       startBtn.style.display = 'none';
     });
     
+    // Paddle hit flash counters (4 frames after hit)
+    let paddleFlashL = 0;
+    let paddleFlashR = 0;
+    // Center line ember particles
+    const centerLineParticles = [];
+    
     // Particle system for hit effects + ball trail
     const particles = [];
     const trailParticles = [];
@@ -1834,7 +1875,7 @@ const GAME_HTML = `<!DOCTYPE html>
     function spawnHitParticles(side, paddleY) {
       const cx = side === 'left' ? canvas.width * 0.03 : canvas.width * 0.97;
       const cy = paddleY * canvas.height;
-      const baseColor = side === 'left' ? [249, 115, 22] : [139, 92, 246]; // orange / purple
+      const baseColor = side === 'left' ? [249, 115, 22] : [192, 38, 211]; // orange / magenta
       
       for (let i = 0; i < HIT_PARTICLES; i++) {
         const angle = (side === 'left' ? 0 : Math.PI) + (Math.random() - 0.5) * 1.8;
@@ -1914,10 +1955,11 @@ const GAME_HTML = `<!DOCTYPE html>
       ctx.fillStyle = '#080810';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw stars
+      // Draw stars (warm tones)
+      const starColors = ['#ffeedd', '#ffcc88', '#ffffff'];
       for (let i = 0; i < bgStars.length; i++) {
         ctx.globalAlpha = bgStars[i].alpha;
-        ctx.fillStyle = '#c8d4ff';
+        ctx.fillStyle = starColors[i % 3];
         ctx.fillRect(bgStars[i].x, bgStars[i].y, bgStars[i].size, bgStars[i].size);
       }
       ctx.globalAlpha = 1.0;
@@ -1925,10 +1967,10 @@ const GAME_HTML = `<!DOCTYPE html>
       // Vignette overlay
       ctx.drawImage(vignetteCanvas, 0, 0);
 
-      // Center line: force field glow
+      // Center line: ember force field
       ctx.fillStyle = centerLineGrad;
       ctx.fillRect(canvas.width * 0.5 - 6, 0, 12, canvas.height);
-      ctx.strokeStyle = 'rgba(80,120,255,0.18)';
+      ctx.strokeStyle = 'rgba(249,115,22,0.18)';
       ctx.setLineDash(centerDash);
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -1936,6 +1978,27 @@ const GAME_HTML = `<!DOCTYPE html>
       ctx.lineTo(canvas.width * 0.5, canvas.height);
       ctx.stroke();
       ctx.setLineDash(noDash);
+      
+      // Center line ember particles (spawn 1 every ~20 frames)
+      if (frameCount % 20 === 0 && centerLineParticles.length < 8) {
+        centerLineParticles.push({
+          x: canvas.width * 0.5 + (Math.random() - 0.5) * 4,
+          y: Math.random() * canvas.height,
+          vy: -0.3 - Math.random() * 0.4,
+          life: 1.0,
+          size: 1 + Math.random() * 1.5
+        });
+      }
+      for (let i = centerLineParticles.length - 1; i >= 0; i--) {
+        const cp = centerLineParticles[i];
+        cp.y += cp.vy;
+        cp.life -= 0.015;
+        if (cp.life <= 0) { centerLineParticles.splice(i, 1); continue; }
+        ctx.globalAlpha = cp.life * 0.5;
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillRect(cp.x, cp.y, cp.size, cp.size);
+      }
+      ctx.globalAlpha = 1.0;
 
       // Scores
       ctx.fillStyle = '#fbbf24';
@@ -1944,13 +2007,14 @@ const GAME_HTML = `<!DOCTYPE html>
       ctx.fillText(score1, canvas.width / 4, 60);
       ctx.fillText(score2, (canvas.width * 3) / 4, 60);
 
-      // Left paddle (orange/gold energy barrier)
+      // Left paddle (orange/gold energy shield)
       const p1y = lerpP1 * canvas.height - paddleHeight * 0.5;
-      // Glow behind
-      ctx.globalAlpha = 0.12;
+      // Animated outer glow (pulsing)
+      const glowL = 0.10 + Math.sin(frameCount * 0.06) * 0.04;
+      ctx.globalAlpha = glowL;
       ctx.fillStyle = '#f97316';
       ctx.beginPath();
-      ctx.roundRect(-2, p1y - 2, paddleWidth + 4, paddleHeight + 4, paddleRadius + 2);
+      ctx.roundRect(-3, p1y - 3, paddleWidth + 6, paddleHeight + 6, paddleRadius + 3);
       ctx.fill();
       ctx.globalAlpha = 1.0;
       // Main paddle
@@ -1958,20 +2022,31 @@ const GAME_HTML = `<!DOCTYPE html>
       ctx.beginPath();
       ctx.roundRect(0, p1y, paddleWidth, paddleHeight, paddleRadius);
       ctx.fill();
-      // Play-side edge highlight
+      // Hit flash (white/gold overlay, decays over 4 frames)
+      if (paddleFlashL > 0) {
+        ctx.globalAlpha = 0.3 * (paddleFlashL / 4);
+        ctx.fillStyle = '#fde68a';
+        ctx.beginPath();
+        ctx.roundRect(0, p1y, paddleWidth, paddleHeight, paddleRadius);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+        paddleFlashL--;
+      }
+      // Hot edge (play-side: right edge)
       ctx.globalAlpha = 0.5;
-      ctx.fillStyle = '#fde68a';
+      ctx.fillStyle = '#ffffff';
       ctx.fillRect(paddleWidth - 1, p1y + 4, 1, paddleHeight - 8);
       ctx.globalAlpha = 1.0;
 
-      // Right paddle (purple energy barrier)
+      // Right paddle (magenta/pink energy shield)
       const p2x = canvas.width - paddleWidth;
       const p2y = lerpP2 * canvas.height - paddleHeight * 0.5;
-      // Glow behind
-      ctx.globalAlpha = 0.12;
-      ctx.fillStyle = '#8b5cf6';
+      // Animated outer glow (pulsing)
+      const glowR = 0.10 + Math.sin(frameCount * 0.06 + 1.5) * 0.04;
+      ctx.globalAlpha = glowR;
+      ctx.fillStyle = '#c026d3';
       ctx.beginPath();
-      ctx.roundRect(p2x - 2, p2y - 2, paddleWidth + 4, paddleHeight + 4, paddleRadius + 2);
+      ctx.roundRect(p2x - 3, p2y - 3, paddleWidth + 6, paddleHeight + 6, paddleRadius + 3);
       ctx.fill();
       ctx.globalAlpha = 1.0;
       // Main paddle
@@ -1979,9 +2054,19 @@ const GAME_HTML = `<!DOCTYPE html>
       ctx.beginPath();
       ctx.roundRect(p2x, p2y, paddleWidth, paddleHeight, paddleRadius);
       ctx.fill();
-      // Play-side edge highlight
+      // Hit flash (white/pink overlay, decays over 4 frames)
+      if (paddleFlashR > 0) {
+        ctx.globalAlpha = 0.3 * (paddleFlashR / 4);
+        ctx.fillStyle = '#f0abfc';
+        ctx.beginPath();
+        ctx.roundRect(p2x, p2y, paddleWidth, paddleHeight, paddleRadius);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+        paddleFlashR--;
+      }
+      // Hot edge (play-side: left edge)
       ctx.globalAlpha = 0.5;
-      ctx.fillStyle = '#c4b5fd';
+      ctx.fillStyle = '#ffffff';
       ctx.fillRect(p2x, p2y + 4, 1, paddleHeight - 8);
       ctx.globalAlpha = 1.0;
 
@@ -2124,7 +2209,7 @@ const GAME_HTML = `<!DOCTYPE html>
         if (!bgMusic) return;
         const dur = bgMusic.duration;
         const cur = bgMusic.currentTime;
-        const targetVol = musicMuted ? 0 : 0.15;
+        const targetVol = musicMuted ? 0 : 0.08;
         if (cur < 0.5) {
           bgMusic.volume = targetVol * (cur / 0.5); // fade in
         } else if (dur - cur < 0.8) {
