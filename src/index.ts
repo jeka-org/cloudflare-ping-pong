@@ -935,7 +935,7 @@ const GAME_HTML = `<!DOCTYPE html>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Courier New', monospace;
-      background: #0a0a0a;
+      background: linear-gradient(135deg, #050510 0%, #0a0a1e 40%, #0d0820 70%, #060612 100%);
       color: #f5f5f5;
       display: flex;
       flex-direction: column;
@@ -946,6 +946,49 @@ const GAME_HTML = `<!DOCTYPE html>
       touch-action: none;
       -webkit-overflow-scrolling: none;
     }
+    /* CSS starfield layers */
+    body::before, body::after {
+      content: '';
+      position: fixed;
+      top: 0; left: 0;
+      width: 200%; height: 200%;
+      pointer-events: none;
+      z-index: 0;
+    }
+    body::before {
+      background: transparent;
+      box-shadow:
+        12px 45px 0 0 rgba(255,255,255,0.7), 89px 120px 0 0 rgba(255,255,255,0.5),
+        200px 30px 0 0 rgba(255,255,255,0.6), 340px 180px 0 0 rgba(255,255,255,0.4),
+        450px 90px 0 0 rgba(255,255,255,0.8), 120px 300px 0 0 rgba(255,255,255,0.3),
+        560px 250px 0 0 rgba(255,255,255,0.6), 700px 60px 0 0 rgba(255,255,255,0.5),
+        280px 400px 0 0 rgba(255,255,255,0.7), 820px 320px 0 0 rgba(255,255,255,0.4),
+        50px 500px 0 0 rgba(255,255,255,0.5), 600px 450px 0 0 rgba(255,255,255,0.6),
+        750px 150px 0 0 rgba(255,255,255,0.3), 900px 400px 0 0 rgba(255,255,255,0.7),
+        180px 220px 0 0 rgba(255,255,255,0.5), 430px 350px 0 0 rgba(255,255,255,0.4),
+        1000px 100px 0 0 rgba(255,255,255,0.6), 1100px 280px 0 0 rgba(255,255,255,0.5),
+        350px 550px 0 0 rgba(255,255,255,0.3), 950px 500px 0 0 rgba(255,255,255,0.6);
+      animation: star-drift-1 80s linear infinite;
+    }
+    body::after {
+      background: transparent;
+      box-shadow:
+        30px 80px 0 1px rgba(200,210,255,0.5), 150px 200px 0 1px rgba(200,210,255,0.3),
+        400px 50px 0 1px rgba(200,210,255,0.4), 600px 300px 0 1px rgba(200,210,255,0.6),
+        250px 450px 0 1px rgba(200,210,255,0.3), 800px 180px 0 1px rgba(200,210,255,0.5),
+        500px 500px 0 1px rgba(200,210,255,0.4), 100px 350px 0 1px rgba(200,210,255,0.3),
+        700px 420px 0 1px rgba(200,210,255,0.5), 950px 80px 0 1px rgba(200,210,255,0.4),
+        1050px 350px 0 1px rgba(200,210,255,0.3), 450px 150px 0 1px rgba(200,210,255,0.5);
+      animation: star-drift-2 120s linear infinite;
+    }
+    @keyframes star-drift-1 {
+      from { transform: translate(0, 0); }
+      to { transform: translate(-40px, -20px); }
+    }
+    @keyframes star-drift-2 {
+      from { transform: translate(0, 0); }
+      to { transform: translate(25px, -15px); }
+    }
     .game-wrap {
       position: relative;
       padding: 20px;
@@ -953,25 +996,6 @@ const GAME_HTML = `<!DOCTYPE html>
     }
     @media (min-width: 900px) {
       .game-wrap { padding: 40px 60px; }
-    }
-    .cloud {
-      position: absolute;
-      border-radius: 50%;
-      background: radial-gradient(ellipse, rgba(255,255,255,0.12), rgba(249,115,22,0.06) 40%, transparent 70%);
-      filter: blur(25px);
-      pointer-events: none;
-      z-index: 0;
-    }
-    .cloud-1 { width: 200px; height: 80px; top: -30px; left: -40px; animation: cloud-drift 12s ease-in-out infinite alternate; }
-    .cloud-2 { width: 250px; height: 90px; top: -20px; right: -50px; animation: cloud-drift 15s ease-in-out infinite alternate-reverse; }
-    .cloud-3 { width: 180px; height: 70px; bottom: -20px; left: 20px; animation: cloud-drift 10s ease-in-out infinite alternate; }
-    .cloud-4 { width: 220px; height: 80px; bottom: -25px; right: 10px; animation: cloud-drift 14s ease-in-out infinite alternate-reverse; }
-    .cloud-5 { width: 160px; height: 60px; top: 40%; left: -50px; animation: cloud-drift 11s ease-in-out infinite alternate; }
-    .cloud-6 { width: 160px; height: 60px; top: 35%; right: -45px; animation: cloud-drift 13s ease-in-out infinite alternate-reverse; }
-    @keyframes cloud-drift {
-      0% { transform: translateX(0) translateY(0); opacity: 0.6; }
-      50% { opacity: 1; }
-      100% { transform: translateX(15px) translateY(-8px); opacity: 0.5; }
     }
     .flare {
       position: absolute;
@@ -981,9 +1005,9 @@ const GAME_HTML = `<!DOCTYPE html>
       width: 110%;
       height: 110%;
       background: radial-gradient(ellipse at center,
-        rgba(249,115,22,0.12) 0%,
-        rgba(251,191,36,0.06) 30%,
-        rgba(249,115,22,0.03) 50%,
+        rgba(100,60,180,0.10) 0%,
+        rgba(60,80,200,0.06) 30%,
+        rgba(80,40,160,0.03) 50%,
         transparent 70%
       );
       pointer-events: none;
@@ -994,31 +1018,10 @@ const GAME_HTML = `<!DOCTYPE html>
       from { opacity: 0.7; transform: translate(-50%, -50%) scale(1); }
       to { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
     }
-    .ember {
-      position: absolute;
-      width: 3px;
-      height: 3px;
-      border-radius: 50%;
-      background: #f97316;
-      pointer-events: none;
-      z-index: 0;
-      opacity: 0;
-    }
-    .ember-1 { bottom: 10%; left: 15%; animation: ember-rise 3s ease-out infinite; animation-delay: 0s; }
-    .ember-2 { bottom: 5%; left: 45%; animation: ember-rise 4s ease-out infinite; animation-delay: 1s; }
-    .ember-3 { bottom: 8%; right: 20%; animation: ember-rise 3.5s ease-out infinite; animation-delay: 0.5s; }
-    .ember-4 { bottom: 12%; right: 35%; animation: ember-rise 5s ease-out infinite; animation-delay: 2s; }
-    .ember-5 { bottom: 3%; left: 70%; animation: ember-rise 3.8s ease-out infinite; animation-delay: 1.5s; }
-    @keyframes ember-rise {
-      0% { opacity: 0; transform: translateY(0) scale(1); }
-      10% { opacity: 0.8; }
-      80% { opacity: 0.3; }
-      100% { opacity: 0; transform: translateY(-120px) translateX(20px) scale(0.3); }
-    }
     #gameCanvas {
-      border: 2px solid #f97316;
-      box-shadow: 0 0 20px rgba(249,115,22,0.4), 0 0 40px rgba(249,115,22,0.2), inset 0 0 60px rgba(249,115,22,0.05);
-      background: #0f0f0f;
+      border: 2px solid rgba(100,80,200,0.6);
+      box-shadow: 0 0 20px rgba(100,80,200,0.3), 0 0 40px rgba(80,60,180,0.15), inset 0 0 60px rgba(60,40,160,0.05);
+      background: #080810;
       position: relative;
       z-index: 1;
       max-width: 100%;
@@ -1212,17 +1215,6 @@ const GAME_HTML = `<!DOCTYPE html>
   <div class="player-names"><span id="p1name" class="p1-name"></span><span id="p2name" class="p2-name"></span></div>
   <div class="game-wrap">
     <div class="flare"></div>
-    <div class="cloud cloud-1"></div>
-    <div class="cloud cloud-2"></div>
-    <div class="cloud cloud-3"></div>
-    <div class="cloud cloud-4"></div>
-    <div class="cloud cloud-5"></div>
-    <div class="cloud cloud-6"></div>
-    <div class="ember ember-1"></div>
-    <div class="ember ember-2"></div>
-    <div class="ember ember-3"></div>
-    <div class="ember ember-4"></div>
-    <div class="ember ember-5"></div>
     <div style="position: relative;">
       <canvas id="gameCanvas" width="800" height="600"></canvas>
       <div class="scanlines"></div>
@@ -1296,15 +1288,56 @@ const GAME_HTML = `<!DOCTYPE html>
     // Fix 3: Pause countdown interval
     let pauseCountdownInterval = null;
     
-    // Pre-cache gradients
+    // Pre-cache gradients and visual data
     const paddleHeight = canvas.height * 0.15;
     const paddleWidth = canvas.width * 0.02;
+    const paddleRadius = paddleWidth * 0.5;
     const grad1 = ctx.createLinearGradient(0, 0, paddleWidth, 0);
     grad1.addColorStop(0, '#f97316');
     grad1.addColorStop(1, '#fbbf24');
     const grad2 = ctx.createLinearGradient(canvas.width - paddleWidth, 0, canvas.width, 0);
     grad2.addColorStop(0, '#8b5cf6');
     grad2.addColorStop(1, '#7c3aed');
+
+    // Frame counter for animations
+    let frameCount = 0;
+
+    // Pre-generate star positions (once)
+    const bgStars = [];
+    for (let i = 0; i < 30; i++) {
+      bgStars.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: Math.random() < 0.3 ? 2 : 1,
+        alpha: 0.15 + Math.random() * 0.45
+      });
+    }
+
+    // Pre-render vignette as offscreen canvas
+    const vignetteCanvas = document.createElement('canvas');
+    vignetteCanvas.width = canvas.width;
+    vignetteCanvas.height = canvas.height;
+    const vCtx = vignetteCanvas.getContext('2d');
+    const vGrad = vCtx.createRadialGradient(
+      canvas.width * 0.5, canvas.height * 0.5, canvas.height * 0.25,
+      canvas.width * 0.5, canvas.height * 0.5, canvas.width * 0.7
+    );
+    vGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    vGrad.addColorStop(1, 'rgba(0,0,0,0.4)');
+    vCtx.fillStyle = vGrad;
+    vCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Center line glow gradient (pre-allocated)
+    const centerLineGrad = ctx.createLinearGradient(canvas.width * 0.5 - 6, 0, canvas.width * 0.5 + 6, 0);
+    centerLineGrad.addColorStop(0, 'rgba(60,100,220,0)');
+    centerLineGrad.addColorStop(0.3, 'rgba(60,100,220,0.06)');
+    centerLineGrad.addColorStop(0.5, 'rgba(80,120,255,0.15)');
+    centerLineGrad.addColorStop(0.7, 'rgba(60,100,220,0.06)');
+    centerLineGrad.addColorStop(1, 'rgba(60,100,220,0)');
+
+    // Pre-allocated dash arrays
+    const centerDash = [10, 14];
+    const noDash = [];
     
     // WebSocket connection
     const roomId = window.location.pathname.split('/')[2];
@@ -1690,61 +1723,137 @@ const GAME_HTML = `<!DOCTYPE html>
     
     // Render loop
     function render() {
+      frameCount++;
       const elapsed = performance.now() - stateTime;
       const t = Math.min(elapsed / 33, 1);
       const lerpBallX = prevBall.x + (ball.x - prevBall.x) * t;
       const lerpBallY = prevBall.y + (ball.y - prevBall.y) * t;
       const lerpP1 = mySlot === 1 ? localPaddleY : prevPaddle1 + (paddle1 - prevPaddle1) * t;
       const lerpP2 = mySlot === 2 ? localPaddleY : prevPaddle2 + (paddle2 - prevPaddle2) * t;
-      
-      ctx.fillStyle = '#0f0f0f';
+
+      // Background: dark blue-black
+      ctx.fillStyle = '#080810';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      ctx.strokeStyle = 'rgba(249,115,22,0.3)';
-      ctx.setLineDash([10, 10]);
+
+      // Draw stars
+      for (let i = 0; i < 30; i++) {
+        ctx.globalAlpha = bgStars[i].alpha;
+        ctx.fillStyle = '#c8d4ff';
+        ctx.fillRect(bgStars[i].x, bgStars[i].y, bgStars[i].size, bgStars[i].size);
+      }
+      ctx.globalAlpha = 1.0;
+
+      // Vignette overlay
+      ctx.drawImage(vignetteCanvas, 0, 0);
+
+      // Center line: force field glow
+      ctx.fillStyle = centerLineGrad;
+      ctx.fillRect(canvas.width * 0.5 - 6, 0, 12, canvas.height);
+      ctx.strokeStyle = 'rgba(80,120,255,0.18)';
+      ctx.setLineDash(centerDash);
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(canvas.width / 2, 0);
-      ctx.lineTo(canvas.width / 2, canvas.height);
+      ctx.moveTo(canvas.width * 0.5, 0);
+      ctx.lineTo(canvas.width * 0.5, canvas.height);
       ctx.stroke();
-      ctx.setLineDash([]);
-      
+      ctx.setLineDash(noDash);
+
+      // Scores
       ctx.fillStyle = '#fbbf24';
       ctx.font = '48px "Courier New"';
       ctx.textAlign = 'center';
       ctx.fillText(score1, canvas.width / 4, 60);
       ctx.fillText(score2, (canvas.width * 3) / 4, 60);
-      
+
+      // Left paddle (orange/gold energy barrier)
+      const p1y = lerpP1 * canvas.height - paddleHeight * 0.5;
+      // Glow behind
+      ctx.globalAlpha = 0.12;
+      ctx.fillStyle = '#f97316';
+      ctx.beginPath();
+      ctx.roundRect(-2, p1y - 2, paddleWidth + 4, paddleHeight + 4, paddleRadius + 2);
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+      // Main paddle
       ctx.fillStyle = grad1;
-      ctx.fillRect(0, lerpP1 * canvas.height - paddleHeight / 2, paddleWidth, paddleHeight);
-      
+      ctx.beginPath();
+      ctx.roundRect(0, p1y, paddleWidth, paddleHeight, paddleRadius);
+      ctx.fill();
+      // Play-side edge highlight
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = '#fde68a';
+      ctx.fillRect(paddleWidth - 1, p1y + 4, 1, paddleHeight - 8);
+      ctx.globalAlpha = 1.0;
+
+      // Right paddle (purple energy barrier)
+      const p2x = canvas.width - paddleWidth;
+      const p2y = lerpP2 * canvas.height - paddleHeight * 0.5;
+      // Glow behind
+      ctx.globalAlpha = 0.12;
+      ctx.fillStyle = '#8b5cf6';
+      ctx.beginPath();
+      ctx.roundRect(p2x - 2, p2y - 2, paddleWidth + 4, paddleHeight + 4, paddleRadius + 2);
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+      // Main paddle
       ctx.fillStyle = grad2;
-      ctx.fillRect(canvas.width - paddleWidth, lerpP2 * canvas.height - paddleHeight / 2, paddleWidth, paddleHeight);
-      
+      ctx.beginPath();
+      ctx.roundRect(p2x, p2y, paddleWidth, paddleHeight, paddleRadius);
+      ctx.fill();
+      // Play-side edge highlight
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = '#c4b5fd';
+      ctx.fillRect(p2x, p2y + 4, 1, paddleHeight - 8);
+      ctx.globalAlpha = 1.0;
+
+      // Ball
       const bx = lerpBallX * canvas.width;
       const by = lerpBallY * canvas.height;
       const br = canvas.width * 0.01;
-      
-      ctx.fillStyle = 'rgba(249,115,22,0.3)';
+
+      // Directional streak behind ball (velocity-based)
+      const bvx = (ball.x - prevBall.x) * canvas.width;
+      const bvy = (ball.y - prevBall.y) * canvas.height;
+      ctx.globalAlpha = 0.08;
+      ctx.fillStyle = '#f97316';
       ctx.beginPath();
-      ctx.arc(bx, by, br * 2.5, 0, Math.PI * 2);
+      ctx.arc(bx - bvx * 0.6, by - bvy * 0.6, br * 1.8, 0, Math.PI * 2);
       ctx.fill();
-      
+      ctx.globalAlpha = 0.05;
+      ctx.beginPath();
+      ctx.arc(bx - bvx * 1.2, by - bvy * 1.2, br * 1.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.03;
+      ctx.beginPath();
+      ctx.arc(bx - bvx * 1.8, by - bvy * 1.8, br * 1.0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+
+      // Outer glow (pulsing)
+      const pulse = 2.3 + Math.sin(frameCount * 0.08) * 0.4;
+      ctx.fillStyle = 'rgba(249,115,22,0.25)';
+      ctx.beginPath();
+      ctx.arc(bx, by, br * pulse, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Main ball
       ctx.fillStyle = '#f97316';
       ctx.beginPath();
       ctx.arc(bx, by, br, 0, Math.PI * 2);
       ctx.fill();
-      
+
+      // Inner highlight
       ctx.fillStyle = '#fbbf24';
       ctx.beginPath();
       ctx.arc(bx, by, br * 0.5, 0, Math.PI * 2);
       ctx.fill();
-      
+
       // Ball trail: spawn ember particles behind the ball
       addTrailParticle(bx, by);
-      
+
       // Draw all particles (hit sparks + trail embers)
       updateAndDrawParticles();
-      
+
       if (gameActive) renderFrameId = requestAnimationFrame(render);
     }
     
