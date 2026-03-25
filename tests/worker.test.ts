@@ -34,12 +34,22 @@ describe('Worker routes', () => {
     expect(resp.headers.get('Access-Control-Allow-Origin')).toBe('*');
   });
 
-  it('serves game page at /r/:roomId', async () => {
-    const resp = await SELF.fetch('http://localhost/r/test-room');
+  it('serves game page at /r/:roomId (after creating room)', async () => {
+    // Fix 5: Room must exist in D1 before game page is served
+    const createResp = await SELF.fetch('http://localhost/api/create', { method: 'POST' });
+    const createData = (await createResp.json()) as { roomId: string };
+    const resp = await SELF.fetch('http://localhost/r/' + createData.roomId);
     expect(resp.status).toBe(200);
     expect(resp.headers.get('content-type')).toContain('text/html');
     const text = await resp.text();
     expect(text).toContain('gameCanvas');
+  });
+
+  it('returns error page for non-existent room', async () => {
+    const resp = await SELF.fetch('http://localhost/r/no-such-room');
+    expect(resp.status).toBe(404);
+    const text = await resp.text();
+    expect(text).toContain('Room Not Available');
   });
 
   it('returns recent games', async () => {
@@ -92,7 +102,10 @@ describe('Worker routes', () => {
   });
 
   it('game page contains spectator badge reference', async () => {
-    const resp = await SELF.fetch('http://localhost/r/test-room');
+    // Create room first so we get the game page, not the error page
+    const createResp = await SELF.fetch('http://localhost/api/create', { method: 'POST' });
+    const createData = (await createResp.json()) as { roomId: string };
+    const resp = await SELF.fetch('http://localhost/r/' + createData.roomId);
     const text = await resp.text();
     expect(text).toContain('spectator');
   });
