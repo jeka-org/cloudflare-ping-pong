@@ -1882,6 +1882,8 @@ const GAME_HTML = `<!DOCTYPE html>
     // Touch: zone-based controls (left 40% = P1, right 40% = P2)
     function handleTouchInput(e) {
       if (!mySlot) return;
+      // Don't preventDefault if touching a button/overlay (kills button taps)
+      if (e.target.tagName === 'BUTTON' || e.target.closest('#orientationOverlay') || e.target.closest('#gameOverOverlay') || e.target.closest('#emojiBar') || e.target.id === 'startBtn' || e.target.id === 'musicToggle' || e.target.closest('.home-link')) return;
       e.preventDefault();
       const rect = canvas.getBoundingClientRect();
       
