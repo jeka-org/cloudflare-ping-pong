@@ -382,7 +382,8 @@ const HOME_HTML = `<!DOCTYPE html>
       color: #000;
       border: none;
       padding: 1rem 3rem;
-      font-size: 1.5rem;
+      font-size: clamp(0.9rem, 3vw, 1.5rem);
+      max-width: 90vw;
       font-family: 'Courier New', monospace;
       font-weight: bold;
       cursor: pointer;
@@ -467,21 +468,24 @@ const HOME_HTML = `<!DOCTYPE html>
     .footer a:hover { opacity: 0.8; }
     @media (max-width: 768px) { .dash-grid { grid-template-columns: 1fr; } }
     @media (max-width: 480px) {
-      h1 { font-size: 2rem !important; }
-      .subtitle { font-size: 0.9rem; margin-bottom: 1.5rem; }
-      .button { font-size: 1rem; padding: 0.7rem 1.5rem; }
-      .stats { gap: 1.5rem; margin-top: 1rem; }
-      .stat-value { font-size: 1.8rem; }
-      .stat-label { font-size: 0.75rem; }
-      .dash-header h2 { font-size: 1rem; }
-      .card h3 { font-size: 0.8rem; }
-      .card { padding: 0.8rem; }
-      .lobby-section { padding: 1rem; margin: 1.5rem auto 1rem; }
-      .lobby-room { padding: 0.7rem 1rem; }
-      .lobby-room-name { font-size: 0.9rem; }
-      .btn-join, .btn-spectate, .btn-secondary { font-size: 0.8rem; padding: 0.4rem 1rem; min-height: 44px; }
-      body { padding: 20px 10px 10px; }
-      .footer { font-size: 0.7rem; }
+      h1 { font-size: 1.8rem !important; }
+      .subtitle { font-size: 0.8rem; margin-bottom: 1.5rem; }
+      .button { font-size: 0.9rem; padding: 0.6rem 1.2rem; width: 100%; max-width: 280px; box-sizing: border-box; }
+      .button-secondary { margin-top: 0.4rem; }
+      .stats { gap: 1rem; margin-top: 1rem; }
+      .stat-value { font-size: 1.5rem; }
+      .stat-label { font-size: 0.7rem; }
+      .dash-header h2 { font-size: 0.9rem; }
+      .card h3 { font-size: 0.75rem; }
+      .card { padding: 0.6rem; }
+      .lobby-section { padding: 0.8rem; margin: 1rem auto 0.8rem; }
+      .lobby-room { padding: 0.6rem 0.8rem; }
+      .lobby-room-name { font-size: 0.85rem; }
+      .btn-join, .btn-spectate, .btn-secondary { font-size: 0.75rem; padding: 0.4rem 0.8rem; min-height: 44px; }
+      .lobby-empty-actions { flex-direction: column; gap: 0.5rem; align-items: center; }
+      .lobby-empty-actions .btn-join, .lobby-empty-actions .btn-spectate { width: 100%; max-width: 220px; }
+      body { padding: 15px 10px 10px; }
+      .footer { font-size: 0.65rem; }
     }
     
     /* Lobby Section - Fix 15: Brighter border with glow */
