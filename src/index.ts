@@ -1880,15 +1880,36 @@ const GAME_HTML = `<!DOCTYPE html>
     canvas.addEventListener('mousemove', handleMouseInput);
     
     // Touch: zone-based controls (left 40% = P1, right 40% = P2)
+    function isInteractiveElement(el) {
+      if (!el) return false;
+      return el.tagName === 'BUTTON' || el.tagName === 'A' || 
+             el.closest('#orientationOverlay') || el.closest('#gameOverOverlay') || 
+             el.closest('#emojiBar') || el.id === 'startBtn' || 
+             el.id === 'musicToggle' || el.closest('.home-link');
+    }
+    
     function handleTouchInput(e) {
       if (!mySlot) return;
-      // Don't preventDefault if touching a button/overlay (kills button taps)
-      if (e.target.tagName === 'BUTTON' || e.target.closest('#orientationOverlay') || e.target.closest('#gameOverOverlay') || e.target.closest('#emojiBar') || e.target.id === 'startBtn' || e.target.id === 'musicToggle' || e.target.closest('.home-link')) return;
-      e.preventDefault();
+      
+      // Check if ANY touch is hitting an interactive element
+      let hasInteractive = false;
+      for (let i = 0; i < e.touches.length; i++) {
+        const el = document.elementFromPoint(e.touches[i].clientX, e.touches[i].clientY);
+        if (isInteractiveElement(el)) { hasInteractive = true; break; }
+      }
+      if (isInteractiveElement(e.target)) hasInteractive = true;
+      
+      // Only preventDefault for pure game touches
+      if (!hasInteractive) e.preventDefault();
+      
       const rect = canvas.getBoundingClientRect();
       
       for (let i = 0; i < e.touches.length; i++) {
         const touch = e.touches[i];
+        // Skip touches on interactive elements
+        const touchEl = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (isInteractiveElement(touchEl)) continue;
+        
         // Use screen-relative position: left half of screen = P1, right half = P2
         const screenX = touch.clientX / window.innerWidth;
         const relY = Math.max(0.075, Math.min(0.925, (touch.clientY - rect.top) / rect.height));
