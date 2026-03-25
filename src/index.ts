@@ -2333,20 +2333,24 @@ const GAME_HTML = `<!DOCTYPE html>
     // Sound effects (Fix 20: softer, warmer sounds)
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     // Mobile browsers require user gesture to start audio
-    // iOS Safari requires audio unlock in direct user gesture call stack
+    // Audio unlock system (iOS Safari requires user gesture in direct call stack)
     let audioUnlocked = false;
     function unlockAudio() {
       if (audioUnlocked) return;
-      // Resume AudioContext
       if (audioCtx.state === 'suspended') audioCtx.resume();
-      // Play a silent buffer to permanently unlock audio on iOS
-      const buf = audioCtx.createBuffer(1, 1, 22050);
-      const src = audioCtx.createBufferSource();
-      src.buffer = buf;
-      src.connect(audioCtx.destination);
-      src.start(0);
+      // Play silent buffer to permanently unlock on iOS
+      try {
+        const buf = audioCtx.createBuffer(1, 1, 22050);
+        const src = audioCtx.createBufferSource();
+        src.buffer = buf;
+        src.connect(audioCtx.destination);
+        src.start(0);
+      } catch(e) {}
       audioUnlocked = true;
-      // Also try starting music if game is already playing
+      // Hide tap-to-start overlay
+      const tapOverlay = document.getElementById('tapToStart');
+      if (tapOverlay) tapOverlay.style.display = 'none';
+      // Start music if game is already playing
       setTimeout(() => {
         if (phase === 'playing' && !bgMusicPlaying && !musicMuted) {
           try { startMusic(); } catch(e) {}
@@ -2356,14 +2360,18 @@ const GAME_HTML = `<!DOCTYPE html>
     function resumeAudio() {
       if (audioCtx.state === 'suspended') audioCtx.resume();
     }
-    // Attach to EVERY possible user gesture event
+    // Attach to every possible user gesture
     ['touchstart', 'touchend', 'click', 'mousedown', 'pointerdown'].forEach(evt => {
       document.addEventListener(evt, unlockAudio, { capture: true });
-      document.addEventListener(evt, resumeAudio, { capture: true });
     });
+    // Show "tap to start" overlay on mobile (dismisses on any tap which also unlocks audio)
+    if (isMobile) {
+      const tapOverlay = document.getElementById('tapToStart');
+      tapOverlay.style.display = 'flex';
+    }
     
     function playSound(type, customFreq) {
-      if (audioCtx.state === 'suspended') resumeAudio(); // try to resume but don't skip
+      if (audioCtx.state === 'suspended') { resumeAudio(); return; }
       const t = audioCtx.currentTime;
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
