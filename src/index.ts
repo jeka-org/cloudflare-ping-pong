@@ -1300,6 +1300,10 @@ const GAME_HTML = `<!DOCTYPE html>
 <body>
   <canvas id="starfieldCanvas"></canvas>
   <!-- Orientation overlay for mobile portrait -->
+  <div id="tapToStart" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(5,5,16,0.9);z-index:9998;flex-direction:column;align-items:center;justify-content:center;text-align:center;cursor:pointer">
+    <div style="font-size:3rem;margin-bottom:1rem">🔊</div>
+    <div style="font-size:1.2rem;color:#fbbf24">Tap anywhere to enable sound</div>
+  </div>
   <div id="orientationOverlay">
     <div class="rotate-icon">📱</div>
     <div class="rotate-msg">Rotate your phone for<br>the best experience</div>
@@ -2359,7 +2363,7 @@ const GAME_HTML = `<!DOCTYPE html>
     });
     
     function playSound(type, customFreq) {
-      if (audioCtx.state === 'suspended') { resumeAudio(); return; } // skip if still locked
+      if (audioCtx.state === 'suspended') resumeAudio(); // try to resume but don't skip
       const t = audioCtx.currentTime;
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
@@ -2439,7 +2443,7 @@ const GAME_HTML = `<!DOCTYPE html>
       bgMusic.volume = 0;
       // Crossfade: fade in on play, fade near end to avoid click
       bgMusic.addEventListener('timeupdate', () => {
-        if (!bgMusic) return;
+        if (!bgMusic || musicFadingOut) return; // don't fight fade-out
         const dur = bgMusic.duration;
         const cur = bgMusic.currentTime;
         const targetVol = musicMuted ? 0 : (isMobile ? 0.03 : 0.08);
@@ -2474,11 +2478,28 @@ const GAME_HTML = `<!DOCTYPE html>
       });
     }
     
+    let musicFadingOut = false;
     function stopMusic() {
-      if (!bgMusic) return;
-      bgMusic.pause();
-      bgMusic.currentTime = 0;
+      if (!bgMusic || !bgMusicPlaying) return;
       bgMusicPlaying = false;
+      musicFadingOut = true;
+      // Fade out over 2 seconds
+      const fadeStart = bgMusic.volume || (isMobile ? 0.03 : 0.08);
+      const fadeSteps = 20;
+      let step = 0;
+      const fadeInterval = setInterval(() => {
+        step++;
+        if (bgMusic) bgMusic.volume = Math.max(0, fadeStart * (1 - step / fadeSteps));
+        if (step >= fadeSteps) {
+          clearInterval(fadeInterval);
+          musicFadingOut = false;
+          if (bgMusic) {
+            bgMusic.pause();
+            bgMusic.currentTime = 0;
+            bgMusic.volume = 0;
+          }
+        }
+      }, 100);
     }
     
     function toggleMusic() {
