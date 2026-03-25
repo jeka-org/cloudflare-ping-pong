@@ -731,12 +731,14 @@ export class GameRoom extends DurableObject<Env> {
     if (leftPaddleCheck.hit) {
       ball = leftPaddleCheck.ball;
       this.gameState.rallyHits++;
+      this.broadcast({ type: 'hit', side: 'left', y: this.gameState.paddle1, rally: this.gameState.rallyHits });
     }
     
     const rightPaddleCheck = checkPaddleCollision(ball, this.gameState.paddle2, 'right');
     if (rightPaddleCheck.hit) {
       ball = rightPaddleCheck.ball;
       this.gameState.rallyHits++;
+      this.broadcast({ type: 'hit', side: 'right', y: this.gameState.paddle2, rally: this.gameState.rallyHits });
     }
     
     const scoreCheck = checkScore(ball);

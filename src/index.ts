@@ -1388,6 +1388,11 @@ const GAME_HTML = `<!DOCTYPE html>
           startMusic();
           break;
           
+        case 'hit':
+          playSound('paddle');
+          spawnHitParticles(data.side, data.y);
+          break;
+          
         case 'score':
           playSound('score');
           statusEl.style.opacity = '1';
@@ -1592,6 +1597,80 @@ const GAME_HTML = `<!DOCTYPE html>
       startBtn.style.display = 'none';
     });
     
+    // Particle system for hit effects + ball trail
+    const particles = [];
+    const trailParticles = [];
+    const MAX_TRAIL = 12;
+    
+    function spawnHitParticles(side, paddleY) {
+      const cx = side === 'left' ? canvas.width * 0.03 : canvas.width * 0.97;
+      const cy = paddleY * canvas.height;
+      const baseColor = side === 'left' ? [249, 115, 22] : [139, 92, 246]; // orange / purple
+      
+      for (let i = 0; i < 8; i++) {
+        const angle = (side === 'left' ? 0 : Math.PI) + (Math.random() - 0.5) * 1.8;
+        const speed = 1.5 + Math.random() * 3;
+        particles.push({
+          x: cx, y: cy,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed + (Math.random() - 0.5) * 2,
+          life: 1.0,
+          decay: 0.02 + Math.random() * 0.02,
+          size: 2 + Math.random() * 3,
+          color: baseColor
+        });
+      }
+    }
+    
+    function updateAndDrawParticles() {
+      // Hit particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.08; // gravity
+        p.life -= p.decay;
+        if (p.life <= 0) { particles.splice(i, 1); continue; }
+        
+        ctx.globalAlpha = p.life * 0.8;
+        ctx.fillStyle = 'rgb(' + p.color[0] + ',' + p.color[1] + ',' + p.color[2] + ')';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      // Ball trail
+      for (let i = trailParticles.length - 1; i >= 0; i--) {
+        const t = trailParticles[i];
+        t.life -= 0.06;
+        t.x += t.vx;
+        t.y += t.vy;
+        if (t.life <= 0) { trailParticles.splice(i, 1); continue; }
+        
+        ctx.globalAlpha = t.life * 0.4;
+        ctx.fillStyle = '#f97316';
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, t.size * t.life, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      ctx.globalAlpha = 1.0;
+    }
+    
+    function addTrailParticle(bx, by) {
+      if (phase !== 'playing') return;
+      trailParticles.push({
+        x: bx + (Math.random() - 0.5) * 4,
+        y: by + (Math.random() - 0.5) * 4,
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: -0.3 - Math.random() * 0.5, // drift upward like embers
+        life: 1.0,
+        size: 1.5 + Math.random() * 2
+      });
+      // Cap trail particles
+      while (trailParticles.length > MAX_TRAIL * 3) trailParticles.shift();
+    }
+    
     // Render loop
     function render() {
       const elapsed = performance.now() - stateTime;
@@ -1642,6 +1721,12 @@ const GAME_HTML = `<!DOCTYPE html>
       ctx.beginPath();
       ctx.arc(bx, by, br * 0.5, 0, Math.PI * 2);
       ctx.fill();
+      
+      // Ball trail: spawn ember particles behind the ball
+      addTrailParticle(bx, by);
+      
+      // Draw all particles (hit sparks + trail embers)
+      updateAndDrawParticles();
       
       if (gameActive) renderFrameId = requestAnimationFrame(render);
     }
@@ -1728,7 +1813,21 @@ const GAME_HTML = `<!DOCTYPE html>
       if (bgMusic) return;
       bgMusic = new Audio('data:audio/mp3;base64,' + MUSIC_B64);
       bgMusic.loop = true;
-      bgMusic.volume = 0.15;
+      bgMusic.volume = 0;
+      // Crossfade: fade in on play, fade near end to avoid click
+      bgMusic.addEventListener('timeupdate', () => {
+        if (!bgMusic) return;
+        const dur = bgMusic.duration;
+        const cur = bgMusic.currentTime;
+        const targetVol = musicMuted ? 0 : 0.15;
+        if (cur < 0.5) {
+          bgMusic.volume = targetVol * (cur / 0.5); // fade in
+        } else if (dur - cur < 0.8) {
+          bgMusic.volume = targetVol * ((dur - cur) / 0.8); // fade out before loop
+        } else {
+          bgMusic.volume = targetVol;
+        }
+      });
     }
     
     function startMusic() {
