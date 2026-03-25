@@ -10,6 +10,8 @@ import {
   checkScore,
   resetBall,
   createPaddle,
+  MAX_BALL_SPEED,
+  BALL_RADIUS,
 } from './physics';
 import { saveGameResults as saveGameResultsD1, updateRoomPlaying, updateRoomStatus, updatePlayerStats } from './d1-queries';
 import { generatePlayerName } from './room-names';
@@ -79,6 +81,10 @@ export class GameRoom extends DurableObject<Env> {
   
   // Fix 6: End reason tracking
   private endReason: 'completed' | 'disconnected' | 'abandoned' | null = null;
+  
+  // Gameplay events system
+  private activeEvents: any[] = [];
+  private eventCheckCounter: number = 0;
   
   // Fix 12: Double-save guard
   private resultsSaved = false;
@@ -519,6 +525,9 @@ export class GameRoom extends DurableObject<Env> {
       this.heartbeatInterval = null;
     }
     this.clearReconnectTimers();
+    // Clear gameplay events
+    this.activeEvents = [];
+    this.eventCheckCounter = 0;
   }
   
   // Fix 3: Clear reconnect timers
@@ -700,6 +709,9 @@ export class GameRoom extends DurableObject<Env> {
     
     if (this.gameState.phase !== 'playing' && this.gameState.phase !== 'scored') return;
     if (this.gameState.phase === 'scored') {
+      // During scored phase: still process events (asteroids drift, gravity pulls)
+      // but skip ball/paddle physics (ball is reset)
+      this.processEvents();
       this.broadcastCounter++;
       if (this.broadcastCounter % 2 === 0) this.broadcastState();
       return;
@@ -813,9 +825,155 @@ export class GameRoom extends DurableObject<Env> {
       this.gameState.ball = ball;
     }
     
+    // --- Gameplay Events System ---
+    this.processEvents();
+    
     this.broadcastCounter++;
     if (this.broadcastCounter % 2 === 0) {
       this.broadcastState();
+    }
+  }
+  
+  // Rally heat level based on consecutive hits
+  private getRallyHeat(): number {
+    const hits = this.gameState.rallyHits;
+    if (hits < 4) return 0;
+    return Math.min(Math.floor((hits - 4) / 3) + 1, 3);
+  }
+  
+  // Process active events: spawn, tick physics, expire
+  private processEvents() {
+    const ball = this.gameState.ball;
+    
+    // Event spawn check
+    this.eventCheckCounter++;
+    if (this.eventCheckCounter >= 180) {
+      this.eventCheckCounter = 0;
+      if (
+        this.activeEvents.length === 0 &&
+        this.gameState.phase === 'playing' &&
+        this.broadcastCounter > 120 // use broadcastCounter as rough frame proxy
+      ) {
+        if (Math.random() < 0.15) {
+          this.spawnEvent();
+        }
+      }
+    }
+    
+    // Process active events
+    for (let i = this.activeEvents.length - 1; i >= 0; i--) {
+      const evt = this.activeEvents[i];
+      evt.age = (evt.age || 0) + 1;
+      
+      if (evt.type === 'gravity_well') {
+        // Apply gravity force to ball
+        const dx = evt.x - ball.x;
+        const dy = evt.y - ball.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 0.3 && dist > 0.001) {
+          const force = evt.strength / Math.max(dist, 0.05);
+          ball.vx += (dx / dist) * force;
+          ball.vy += (dy / dist) * force;
+        }
+        
+        // Check expiry
+        evt.durationFrames--;
+        if (evt.durationFrames <= 0) {
+          this.activeEvents.splice(i, 1);
+          continue;
+        }
+      } else if (evt.type === 'asteroid') {
+        // Move asteroid
+        evt.y += evt.vy;
+        
+        // Remove if off-screen
+        if (evt.y < -0.15 || evt.y > 1.15) {
+          this.activeEvents.splice(i, 1);
+          continue;
+        }
+        
+        // Ball-asteroid collision (AABB)
+        const halfW = evt.width / 2;
+        const halfH = evt.height / 2;
+        const br = BALL_RADIUS;
+        
+        // Check overlap
+        const overlapX = (halfW + br) - Math.abs(ball.x - evt.x);
+        const overlapY = (halfH + br) - Math.abs(ball.y - evt.y);
+        
+        if (overlapX > 0 && overlapY > 0) {
+          // Collision! Resolve along smallest penetration axis
+          if (overlapX < overlapY) {
+            // Push out horizontally
+            ball.vx = -ball.vx;
+            ball.x += (ball.x < evt.x ? -overlapX : overlapX);
+          } else {
+            // Push out vertically
+            ball.vy = -ball.vy;
+            ball.y += (ball.y < evt.y ? -overlapY : overlapY);
+          }
+        }
+        
+        // Check expiry
+        evt.durationFrames--;
+        if (evt.durationFrames <= 0) {
+          this.activeEvents.splice(i, 1);
+          continue;
+        }
+      }
+    }
+    
+    // Rally heat speed multiplier: apply after paddle collisions have already set speed
+    const rallyHeat = this.getRallyHeat();
+    if (rallyHeat > 0) {
+      const speedMultiplier = 1 + rallyHeat * 0.1;
+      const currentSpeed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+      const maxForHeat = MAX_BALL_SPEED * speedMultiplier;
+      // Only boost if not already above the heat cap
+      // (don't slow the ball if gravity well pushed it above cap; that's handled by absolute clamp)
+    }
+    
+    // ABSOLUTE speed clamp after ALL modifiers
+    const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+    const absoluteMax = MAX_BALL_SPEED * 1.5;
+    if (speed > absoluteMax) {
+      const scale = absoluteMax / speed;
+      ball.vx *= scale;
+      ball.vy *= scale;
+    }
+    
+    this.gameState.ball = ball;
+  }
+  
+  // Spawn a random gameplay event
+  private spawnEvent() {
+    const roll = Math.random();
+    if (roll < 0.4) {
+      // Gravity well (40% chance)
+      this.activeEvents.push({
+        type: 'gravity_well',
+        x: 0.25 + Math.random() * 0.5,    // 0.25-0.75
+        y: 0.2 + Math.random() * 0.6,      // 0.2-0.8
+        radius: 0.08,
+        strength: 0.0003,
+        startFrame: this.broadcastCounter,
+        durationFrames: 300,
+        age: 0,
+      });
+    } else {
+      // Asteroid (60% chance)
+      const fromTop = Math.random() < 0.5;
+      this.activeEvents.push({
+        type: 'asteroid',
+        x: 0.2 + Math.random() * 0.6,      // 0.2-0.8
+        y: fromTop ? -0.06 : 1.06,
+        width: 0.06,
+        height: 0.12,
+        vy: fromTop ? 0.001 : -0.001,
+        startFrame: this.broadcastCounter,
+        durationFrames: 600,
+        age: 0,
+      });
     }
   }
   
@@ -881,6 +1039,10 @@ export class GameRoom extends DurableObject<Env> {
       state.disconnectedSlot = this.disconnectedSlot;
       state.remainingSeconds = this.reconnectSecondsLeft;
     }
+    
+    // Gameplay events
+    state.events = this.activeEvents;
+    state.rallyHeat = this.getRallyHeat();
     
     this.broadcast(state);
   }

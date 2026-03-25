@@ -1529,6 +1529,10 @@ const GAME_HTML = `<!DOCTYPE html>
     let pingInterval = null;
     let gameActive = true;
     
+    // Gameplay events
+    let activeEvents = [];
+    let rallyHeat = 0;
+    
     // Fix 9: Floating emoji tracking
     const floatingEmojis = [];
     const MAX_FLOATING_EMOJIS = 5;
@@ -1616,6 +1620,9 @@ const GAME_HTML = `<!DOCTYPE html>
           score1 = data.score1; score2 = data.score2;
           phase = data.phase;
           stateTime = performance.now();
+          // Gameplay events
+          if (data.events) activeEvents = data.events;
+          if (data.rallyHeat !== undefined) rallyHeat = data.rallyHeat;
           // Fix 3: Update pause overlay from state if paused
           if (data.phase === 'paused' && data.disconnectedSlot) {
             showPauseOverlay(data.disconnectedSlot, data.remainingSeconds);
@@ -2028,6 +2035,109 @@ const GAME_HTML = `<!DOCTYPE html>
       ctx.fillText(score1, canvas.width / 4, 60);
       ctx.fillText(score2, (canvas.width * 3) / 4, 60);
 
+      // --- Gameplay Events Rendering ---
+      for (let ei = 0; ei < activeEvents.length; ei++) {
+        const evt = activeEvents[ei];
+        const evtAge = evt.age || 0;
+        const spawnScale = Math.min(evtAge / 15, 1); // grow-in animation
+
+        if (evt.type === 'gravity_well') {
+          const gx = evt.x * canvas.width;
+          const gy = evt.y * canvas.height;
+          const gr = evt.radius * canvas.width * spawnScale;
+
+          // Radial gradient glow
+          const gGrad = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr);
+          gGrad.addColorStop(0, 'rgba(249,115,22,0.4)');
+          gGrad.addColorStop(0.4, 'rgba(251,191,36,0.15)');
+          gGrad.addColorStop(1, 'rgba(249,115,22,0)');
+          ctx.fillStyle = gGrad;
+          ctx.beginPath();
+          ctx.arc(gx, gy, gr, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 8 orbiting particles
+          for (let pi = 0; pi < 8; pi++) {
+            const angle = (frameCount * 0.03) + (pi * Math.PI * 2 / 8);
+            const orbitR = gr * (0.5 + 0.3 * Math.sin(frameCount * 0.02 + pi));
+            const px = gx + Math.cos(angle) * orbitR;
+            const py = gy + Math.sin(angle) * orbitR;
+            ctx.globalAlpha = 0.6 * spawnScale;
+            ctx.fillStyle = '#fbbf24';
+            ctx.beginPath();
+            ctx.arc(px, py, 2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.globalAlpha = 1.0;
+
+          // Pull lines from ball to well when nearby
+          const pdx = gx - lerpBallX * canvas.width;
+          const pdy = gy - lerpBallY * canvas.height;
+          const pdist = Math.sqrt(pdx * pdx + pdy * pdy);
+          if (pdist < gr * 3 && pdist > 1) {
+            ctx.globalAlpha = 0.15 * (1 - pdist / (gr * 3));
+            ctx.strokeStyle = '#f97316';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(lerpBallX * canvas.width, lerpBallY * canvas.height);
+            ctx.lineTo(gx, gy);
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+          }
+
+        } else if (evt.type === 'asteroid') {
+          const ax = evt.x * canvas.width;
+          const ay = evt.y * canvas.height;
+          const aw = evt.width * canvas.width;
+          const ah = evt.height * canvas.height;
+
+          ctx.save();
+          ctx.translate(ax, ay);
+          ctx.rotate(frameCount * 0.005); // slow spin
+
+          // Dark rocky body with orange-lit edges
+          const halfW = aw / 2;
+          const halfH = ah / 2;
+          ctx.fillStyle = '#1a1a2e';
+          ctx.beginPath();
+          ctx.roundRect(-halfW, -halfH, aw, ah, 4);
+          ctx.fill();
+
+          // Orange edge glow
+          ctx.strokeStyle = 'rgba(249,115,22,0.5)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.roundRect(-halfW, -halfH, aw, ah, 4);
+          ctx.stroke();
+
+          // Bright edge highlight
+          ctx.strokeStyle = 'rgba(251,191,36,0.3)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.roundRect(-halfW + 1, -halfH + 1, aw - 2, ah - 2, 3);
+          ctx.stroke();
+
+          ctx.restore();
+        }
+      }
+
+      // Rally heat vignette overlay
+      if (rallyHeat > 0) {
+        const heatAlpha = rallyHeat === 1 ? 0.08 : rallyHeat === 2 ? 0.15 : 0.25;
+        const pulseAlpha = rallyHeat >= 3 ? Math.sin(frameCount * 0.1) * 0.05 : 0;
+        const finalAlpha = heatAlpha + pulseAlpha;
+
+        // Orange vignette at edges
+        const hGrad = ctx.createRadialGradient(
+          canvas.width * 0.5, canvas.height * 0.5, canvas.height * 0.3,
+          canvas.width * 0.5, canvas.height * 0.5, canvas.width * 0.7
+        );
+        hGrad.addColorStop(0, 'rgba(249,115,22,0)');
+        hGrad.addColorStop(1, 'rgba(249,115,22,' + finalAlpha + ')');
+        ctx.fillStyle = hGrad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+
       // Left paddle (orange/gold energy shield)
       const p1y = lerpP1 * canvas.height - paddleHeight * 0.5;
       // Animated outer glow (pulsing)
@@ -2114,9 +2224,11 @@ const GAME_HTML = `<!DOCTYPE html>
       ctx.fill();
       ctx.globalAlpha = 1.0;
 
-      // Outer glow (pulsing)
-      const pulse = 2.3 + Math.sin(frameCount * 0.08) * 0.4;
-      ctx.fillStyle = 'rgba(249,115,22,0.25)';
+      // Outer glow (pulsing, enhanced by rally heat)
+      const heatGlowMult = rallyHeat > 0 ? 1 + rallyHeat * 0.5 : 1;
+      const pulse = (2.3 + Math.sin(frameCount * 0.08) * 0.4) * heatGlowMult;
+      const glowAlpha = Math.min(0.25 * heatGlowMult, 0.6);
+      ctx.fillStyle = 'rgba(249,115,22,' + glowAlpha + ')';
       ctx.beginPath();
       ctx.arc(bx, by, br * pulse, 0, Math.PI * 2);
       ctx.fill();
